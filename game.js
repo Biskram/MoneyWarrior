@@ -1,979 +1,1275 @@
-// ===== KONFIG STATYSTYK =====
+// ===== KONFIG =====
+
 const STATS = [
-  { id: 0, key: "str", name: "Siła",         icon: "strength.png"   },
-  { id: 1, key: "vit", name: "Wytrzymałość", icon: "Durability.png" },
-  { id: 2, key: "spd", name: "Szybkość",     icon: "speed.png"      },
-  { id: 3, key: "tac", name: "Taktyka",      icon: "Tactics.png"    },
-  { id: 4, key: "sta", name: "Kondycja",     icon: "condition.png"  },
+  { id: 'STR', name: 'Siła',          icon: 'strength.png',   desc: 'Surowa moc ciosu.' },
+  { id: 'END', name: 'Wytrzymałość',  icon: 'Durability.png', desc: 'Przyjmowanie obrażeń.' },
+  { id: 'SPD', name: 'Szybkość',      icon: 'speed.png',      desc: 'Pierwszy krok i unik.' },
+  { id: 'TAC', name: 'Taktyka',       icon: 'Tactics.png',    desc: 'Sprytne kontry.' },
+  { id: 'STA', name: 'Kondycja',      icon: 'condition.png',  desc: 'Długa walka.' },
 ];
 
-// kto na kogo MOCNY
-const BEATS = {
-  0: [2, 4], // Siła > Szybkość, Kondycja
-  1: [0, 4], // Wytrzymałość > Siła, Kondycja
-  2: [1, 3], // Szybkość > Wytrzymałość, Taktyka
-  3: [0, 1], // Taktyka > Siła, Wytrzymałość
-  4: [2, 3], // Kondycja > Szybkość, Taktyka
+const COUNTERS_FOR = {
+  STR: ['END','TAC'],
+  END: ['SPD','TAC'],
+  SPD: ['STR','STA'],
+  STA: ['STR','END'],
+  TAC: ['SPD','STA'],
 };
 
-// kto KONTRUJE daną statę (realna kara)
-const COUNTERS = {
-  0: [1, 3], // Siła < Wytrzymałość, Taktyka
-  1: [2, 3], // Wytrzymałość < Szybkość, Taktyka
-  2: [0, 4], // Szybkość < Siła, Kondycja
-  3: [2, 4], // Taktyka < Szybkość, Kondycja
-  4: [0, 1], // Kondycja < Siła, Wytrzymałość
-};
-
-// MAPY
 const MAPS = [
-  { id: "str", statIndex: 0, name: "Płonąca Arena",    baseText: "Premia do Siły (atak)",        image: "fire.png" },
-  { id: "vit", statIndex: 1, name: "Leśna Forteca",    baseText: "Premia do Wytrzymałości (HP)", image: "natural.png" },
-  { id: "spd", statIndex: 2, name: "Burza Prędkości",  baseText: "Premia do Szybkości",          image: "lightning.png" },
-  { id: "tac", statIndex: 3, name: "Arena Taktyków",   baseText: "Premia do Taktyki",             image: "tlo.png" },
-  { id: "sta", statIndex: 4, name: "Wietrzne Szczyty", baseText: "Premia do Kondycji",            image: "wind.png" },
+  { id: 'water',   name: 'Źródło Wytrwałości', bg: 'Water.mp4',     buffStat: 'STA' },
+  { id: 'fire',    name: 'Płonąca Arena',      bg: 'fire.mp4',      buffStat: 'STR' },
+  { id: 'wind',    name: 'Wietrzne Szczyty',   bg: 'wind.mp4',      buffStat: 'SPD' },
+  { id: 'forest',  name: 'Leśna Forteca',      bg: 'natural.mp4',   buffStat: 'END' },
+  { id: 'storm',   name: 'Burza Myśli',        bg: 'lightning.mp4', buffStat: 'TAC' },
 ];
 
-const BOT_NAMES = ["Bot Kamil","Bot Antek","Bot Mira","Bot Vega","Bot Draco","Bot Astra"];
-
-/* ===== STAN GRY ===== */
-const gameState = {
-  stake: 30,
-  multiplier: 1,
-  botName: "",
-  playerStats: [0,0,0,0,0],
-  botStats: [0,0,0,0,0],
-  map: null,
-  mapBuffPercent: 0,
-  rounds: [],             // {playerStatIndex, botStatIndex, playerWeight, botWeight}
-  currentRoundIndex: -1,
-  preparedRoundIndex: null, // wylosowany, ale jeszcze niezaatakowany
-  playerHP: 100,
-  botHP: 100,
-  mapSlotDone: false,
-  isRoundAnimating: false,
-  lastCountersPlayerUsed: [],
-  lastCountersBotUsed: [],
-  activePlayerStatIndex: null,  // stat użyty w tej rundzie (Ty)
-  activeBotStatIndex: null,     // stat użyty w tej rundzie (Bot)
+const MAP_THEMES = {
+  water:  { accent: '#38bdf8', accent2: '#0ea5e9' },
+  fire:   { accent: '#f97316', accent2: '#fb7185' },
+  wind:   { accent: '#a5b4fc', accent2: '#38bdf8' },
+  forest: { accent: '#4ade80', accent2: '#22c55e' },
+  storm:  { accent: '#a855f7', accent2: '#ec4899' },
 };
 
-function $(id){ return document.getElementById(id); }
-function randomFromArray(a){ return a[Math.floor(Math.random()*a.length)]; }
-function randomOrderForStats(){
-  const arr=[0,1,2,3,4];
-  for(let i=arr.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [arr[i],arr[j]]=[arr[j],arr[i]];
+const LEVELS = [
+  { id: 1, label: 'Poziom 1', slotMin: 1, slotMax: 2, poolMin: 1, poolMax: 2, winsFloor: 0 },
+  { id: 2, label: 'Poziom 2', slotMin: 2, slotMax: 3, poolMin: 2, poolMax: 3, winsFloor: 2 },
+  { id: 3, label: 'Poziom 3', slotMin: 3, slotMax: 5, poolMin: 3, poolMax: 5, winsFloor: 4 },
+];
+
+// zamiast „botów”
+const NAMES = ['Gracz Demo1','Gracz Demo2','Gracz Demo3','Gracz Demo4','Gracz Demo5','Gracz Demo6'];
+
+const HP_MAX             = 100;
+const STAT_POINTS_TOTAL  = 10;
+const POINT_POWER        = 10;
+
+// ===== STAN =====
+
+const player = { name: 'Ty', hp: HP_MAX, stats: {}, level: 1 };
+const bot    = { name: '',   hp: HP_MAX, stats: {}, level: 1 };
+
+let playerAllocation = { STR:0, END:0, SPD:0, TAC:0, STA:0 };
+
+let consecutiveWins      = 0;
+let currentLevelId       = 1;
+let currentMatchLevelId  = 1;
+
+let currentMap       = null;
+let mapBuffPercent   = 0;
+let poolMultiplier   = 1;
+let stakePerPlayer   = 30;
+
+let inAnimation      = false;
+
+// fazy: 'idle' | 'playerRolled'
+let phase            = 'idle';
+
+let plannedRound = {
+  playerStatId: null,
+  playerMult:   1,
+  botStatId:    null,
+  botMult:      1,
+};
+
+// pokoje
+let rooms       = [];
+let currentRoom = null;
+let nextRoomId  = 1;
+
+// ===== DOM =====
+
+// ekrany
+const screenStart  = document.getElementById('screenStart');
+const screenBuild  = document.getElementById('screenBuild');
+const screenBattle = document.getElementById('screenBattle');
+
+const startBtn          = document.getElementById('startBtn');
+const buildBackBtn      = document.getElementById('buildBackBtn');
+const buildConfirmBtn   = document.getElementById('buildConfirmBtn');
+const rerollMapBtn      = document.getElementById('rerollMapBtn');
+const demoLevelBtn      = document.getElementById('demoLevelBtn');
+const buildStatsList    = document.getElementById('buildStatsList');
+const pointsLeftEl      = document.getElementById('pointsLeft');
+const levelBadgeEl      = document.getElementById('levelBadge');
+const streakInfoEl      = document.getElementById('streakInfo');
+const matchmakingInfoEl = document.getElementById('matchmakingInfo');
+const buildMapVideoEl   = document.getElementById('buildMapVideo');
+const buildMapNameEl    = document.getElementById('buildMapName');
+const buildMapBuffEl    = document.getElementById('buildMapBuff');
+const buildSkillMultEl  = document.getElementById('buildSkillMult');
+const buildPointMultEl  = document.getElementById('buildPointMult');
+const buildMapLevelChipEl = document.getElementById('buildMapLevelChip');
+const buildSkillRangeEl   = document.getElementById('buildSkillRange');
+const deathOverlayEl    = document.getElementById('deathOverlay');
+const deathVideoEl      = document.getElementById('deathVideo');
+
+// pokoje DOM
+const roomsListEl    = document.getElementById('roomsList');
+const createRoomBtn  = document.getElementById('createRoomBtn');
+
+// HUD / zasady kontr (dół)
+const roundInfoEl     = document.getElementById('roundInfo');
+const mapNameEl       = document.getElementById('mapName');
+const counterLegendEl = document.getElementById('counterLegend');
+const counterRowEl    = document.getElementById('counterRow');
+const battlePlayerLevelEl = document.getElementById('battlePlayerLevel');
+const battleBotLevelEl    = document.getElementById('battleBotLevel');
+
+// arena
+const arenaBgEl       = document.getElementById('arenaBg');
+const bigMapIcon      = document.getElementById('bigMapIcon');
+const bigMapIconImg   = document.getElementById('bigMapIconImg');
+const mapBonusEl      = document.getElementById('mapBonus');
+const poolInfoEl      = document.getElementById('poolInfo');
+
+const playerNameEl    = document.getElementById('playerName');
+const botNameEl       = document.getElementById('botName');
+const playerHpTextEl  = document.getElementById('playerHpText');
+const botHpTextEl     = document.getElementById('botHpText');
+const playerHpBarEl   = document.getElementById('playerHpBar');
+const botHpBarEl      = document.getElementById('botHpBar');
+
+const playerStatsStackEl = document.getElementById('playerStatsStack');
+const botStatsStackEl    = document.getElementById('botStatsStack');
+
+const playerSpriteEl  = document.getElementById('playerSprite');
+const botSpriteEl     = document.getElementById('botSprite');
+
+const centerVsEl      = document.getElementById('centerVs');
+const centerAtkText   = document.getElementById('centerAtkText');
+const centerDefText   = document.getElementById('centerDefText');
+const centerDiffText  = document.getElementById('centerDiffText');
+
+const playerFloatingDmg = document.getElementById('playerFloatingDmg');
+const botFloatingDmg    = document.getElementById('botFloatingDmg');
+
+const playerFrontValue  = document.getElementById('playerFrontValue');
+const botFrontValue     = document.getElementById('botFrontValue');
+
+// sloty + przyciski
+const playerSlotEl     = document.getElementById('playerSlot');
+const botSlotEl        = document.getElementById('botSlot');
+const playerSlotIconEl = document.getElementById('playerSlotIcon');
+const botSlotIconEl    = document.getElementById('botSlotIcon');
+const playerSlotMultEl = document.getElementById('playerSlotMult');
+const botSlotMultEl    = document.getElementById('botSlotMult');
+const playerSlotStatEl = document.getElementById('playerSlotStat');
+const botSlotStatEl    = document.getElementById('botSlotStat');
+
+const rollBtn  = document.getElementById('rollBtn');
+const resetBtn = document.getElementById('resetBtn');
+const logBoxEl = document.getElementById('logBox');
+
+// DEV
+const devBonusBtn = document.getElementById('devBonusBtn');
+const devWinBtn   = document.getElementById('devWinBtn');
+const devLoseBtn  = document.getElementById('devLoseBtn');
+const devDodgeBtn = document.getElementById('devDodgeBtn');
+
+// UNIK
+let dodgeBannerEl   = null;
+
+// ===== HELPERY =====
+
+const wait = ms => new Promise(res => setTimeout(res, ms));
+
+function randomChoice(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function randomInt(min,max) {
+  return Math.floor(Math.random() * (max-min+1)) + min;
+}
+
+function getLevelConfig(levelId) {
+  return LEVELS.find(l => l.id === levelId) || LEVELS[0];
+}
+
+function computeLevelFromWins(wins) {
+  if (wins >= 4) return 3;
+  if (wins >= 2) return 2;
+  return 1;
+}
+
+function levelStartWins(levelId) {
+  if (levelId <= 1) return 0;
+  if (levelId === 2) return 2;
+  return 4;
+}
+
+function setLevelForDemo(levelId) {
+  const target = Math.min(Math.max(levelId, 1), LEVELS.length);
+  consecutiveWins = levelStartWins(target);
+  currentLevelId = target;
+  currentMatchLevelId = currentLevelId;
+  poolMultiplier = rollPoolMultiplier(currentLevelId);
+  rollMap(playerAllocation, currentLevelId);
+  updateLevelUI();
+}
+
+// mnożnik slotu – zawsze 1–3
+function rollSlotMultiplier() {
+  return randomInt(1,3);
+}
+
+function rollPoolMultiplier(levelId = currentLevelId) {
+  const cfg = getLevelConfig(levelId);
+  return randomInt(cfg.poolMin, cfg.poolMax);
+}
+
+function currentSlotRange() {
+  return { min: 1, max: 3 };
+}
+
+function showScreen(name) {
+  screenStart.classList.remove('active');
+  screenBuild.classList.remove('active');
+  screenBattle.classList.remove('active');
+
+  if (name === 'start')   screenStart.classList.add('active');
+  if (name === 'build')   screenBuild.classList.add('active');
+  if (name === 'battle')  screenBattle.classList.add('active');
+}
+
+function cloneAllocation() {
+  return { ...playerAllocation };
+}
+
+function randomStats() {
+  const stats = { STR:0, END:0, SPD:0, TAC:0, STA:0 };
+  let left = STAT_POINTS_TOTAL;
+  const keys = Object.keys(stats);
+  while (left > 0) {
+    const k = randomChoice(keys);
+    stats[k] += 1;
+    left--;
   }
-  return arr;
-}
-function randomBuffPercent(){ return randomFromArray([5,10,15,20,25,30]); }
-function randomRoundWeight(){ return 1+Math.floor(Math.random()*3); }
-
-function setScreen(id){
-  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("screen-active"));
-  const el=$(id); if(el) el.classList.add("screen-active");
-}
-
-document.addEventListener("DOMContentLoaded",()=>{
-  setupStartScreen();
-  setupAllocateScreen();
-  setupBattleScreen();
-  setupResultScreen();
-  renderCountersLegend();
-});
-
-/* ========== START ========== */
-
-function setupStartScreen(){
-  $("btn-find-match").addEventListener("click",()=>{
-    const stakeInput=$("stake-input");
-    const stakeValue=parseInt(stakeInput.value,10);
-    if(isNaN(stakeValue)||stakeValue<10){
-      alert("Podaj stawkę co najmniej 10 punktów.");
-      return;
-    }
-    gameState.stake=stakeValue;
-    gameState.multiplier=1+Math.floor(Math.random()*3);
-    gameState.botName=randomFromArray(BOT_NAMES);
-    gameState.playerStats=[0,0,0,0,0];
-    gameState.botStats=[0,0,0,0,0];
-    gameState.map=null;
-    gameState.mapBuffPercent=0;
-    gameState.playerHP=100;
-    gameState.botHP=100;
-    gameState.rounds=[];
-    gameState.currentRoundIndex=-1;
-    gameState.preparedRoundIndex=null;
-    gameState.mapSlotDone=false;
-    gameState.isRoundAnimating=false;
-    gameState.lastCountersPlayerUsed=[];
-    gameState.lastCountersBotUsed=[];
-    gameState.activePlayerStatIndex=null;
-    gameState.activeBotStatIndex=null;
-
-    renderAllocateScreen();
-    setScreen("screen-allocate");
-  });
-}
-
-/* ========== ROZDZIELANIE STATÓW ========== */
-
-function setupAllocateScreen(){
-  $("btn-back-start").addEventListener("click",()=>setScreen("screen-start"));
-  $("btn-accept-build").addEventListener("click",()=>{
-    const stats=readPlayerStatsFromForm();
-    const sum=stats.reduce((s,v)=>s+v,0);
-    if(sum!==10){
-      alert("Musisz rozdać dokładnie 10 punktów.");
-      return;
-    }
-    gameState.playerStats=stats;
-    gameState.botStats=generateBotStats();
-    initBattleState();
-    setScreen("screen-battle");
-    renderBattleScreenInitial();
-  });
-}
-
-function renderAllocateScreen(){
-  $("bot-name").textContent=gameState.botName;
-  $("stake-display").textContent=gameState.stake;
-  $("multiplier-display").textContent=gameState.multiplier;
-  $("potential-win").textContent=gameState.stake*2*gameState.multiplier;
-
-  const container=$("elements-form");
-  container.innerHTML="";
-  STATS.forEach((st,idx)=>{
-    const row=document.createElement("div");
-    row.className="element-row";
-
-    const label=document.createElement("div");
-    label.className="element-label";
-    const img=document.createElement("img");
-    img.src=st.icon;
-    img.alt=st.name;
-    img.className="stat-icon";
-    const span=document.createElement("span");
-    span.textContent=st.name;
-    label.appendChild(img);
-    label.appendChild(span);
-
-    const wrap=document.createElement("div");
-    wrap.className="element-input";
-    const input=document.createElement("input");
-    input.type="number";
-    input.min="0";
-    input.max="10";
-    input.value="0";
-    input.dataset.index=idx;
-    input.addEventListener("input",updatePointsLeft);
-    wrap.appendChild(input);
-
-    row.appendChild(label);
-    row.appendChild(wrap);
-    container.appendChild(row);
-  });
-
-  $("points-left").textContent="10";
-  startMultiplierSlotAnimation();
-}
-
-function readPlayerStatsFromForm(){
-  const inputs=document.querySelectorAll("#elements-form input[type='number']");
-  const stats=[0,0,0,0,0];
-  inputs.forEach(input=>{
-    const idx=parseInt(input.dataset.index,10);
-    const val=parseInt(input.value,10)||0;
-    stats[idx]=Math.max(0,val);
-  });
   return stats;
 }
 
-function updatePointsLeft(){
-  const stats=readPlayerStatsFromForm();
-  const sum=stats.reduce((s,v)=>s+v,0);
-  const left=10-sum;
-  const el=$("points-left");
-  el.textContent=left;
-  el.style.color = left<0 ? "#fb923c" : left>0 ? "#e5e7eb" : "#22c55e";
+function sumCounters(defenderStats, statId) {
+  const counterIds = COUNTERS_FOR[statId] || [];
+  let sum = 0;
+  for (const id of counterIds) sum += defenderStats[id] || 0;
+  return { counterIds, sum };
 }
 
-function generateBotStats(){
-  const s=[0,0,0,0,0];
-  let p=10;
-  while(p>0){
-    const i=Math.floor(Math.random()*5);
-    s[i]++; p--;
+function highestStatId(stats) {
+  let best = null, val = -1;
+  for (const [k,v] of Object.entries(stats)) {
+    if (v > val) { val = v; best = k; }
   }
-  return s;
+  return best;
 }
 
-/* animacja mnożnika na starcie */
+// ===== POKOJE =====
 
-function startMultiplierSlotAnimation(){
-  const multSpan=$("multiplier-display");
-  const potSpan=$("potential-win");
-  const stake=gameState.stake;
-
-  let steps=15;
-  let totalDelay=0;
-
-  for(let i=0;i<steps;i++){
-    const delay=40 + i*20;
-    totalDelay+=delay;
-    setTimeout(()=>{
-      const tmp=1+Math.floor(Math.random()*3);
-      multSpan.textContent=tmp;
-      potSpan.textContent=stake*2*tmp;
-    }, totalDelay);
+function ensureRoomsForLevel(levelId) {
+  if (!rooms.length || rooms[0].level !== levelId) {
+    rooms = [];
+    for (let i = 0; i < 3; i++) {
+      rooms.push({
+        id: nextRoomId++,
+        level: levelId,
+        stake: (i+1) * 20,
+        ownerName: randomChoice(NAMES),
+      });
+    }
+    currentRoom = null;
   }
-
-  setTimeout(()=>{
-    multSpan.textContent=gameState.multiplier;
-    potSpan.textContent=stake*2*gameState.multiplier;
-  }, totalDelay+80);
+  renderRooms();
 }
 
-/* ========== PRZYGOTOWANIE WALKI ========== */
+function renderRooms() {
+  if (!roomsListEl) return;
+  roomsListEl.innerHTML = '';
 
-function initBattleState(){
-  gameState.map=randomFromArray(MAPS);
-  gameState.mapBuffPercent=randomBuffPercent();
-
-  const pOrder=randomOrderForStats();
-  const bOrder=randomOrderForStats();
-  gameState.rounds=[];
-  for(let i=0;i<5;i++){
-    gameState.rounds.push({
-      playerStatIndex:pOrder[i],
-      botStatIndex:bOrder[i],
-      playerWeight:randomRoundWeight(),
-      botWeight:randomRoundWeight(),
-    });
-  }
-  gameState.playerHP=100;
-  gameState.botHP=100;
-  gameState.currentRoundIndex=-1;
-  gameState.preparedRoundIndex=null;
-  gameState.mapSlotDone=false;
-  gameState.isRoundAnimating=false;
-  gameState.lastCountersPlayerUsed=[];
-  gameState.lastCountersBotUsed=[];
-  gameState.activePlayerStatIndex=null;
-  gameState.activeBotStatIndex=null;
-}
-
-/* ========== WALKA ========== */
-
-function setupBattleScreen(){
-  $("btn-battle-back").addEventListener("click",()=>setScreen("screen-start"));
-  $("btn-next-round").addEventListener("click",()=>handleNextRoundClick());
-}
-
-function renderBattleScreenInitial(){
-  $("battle-bot-name").textContent=gameState.botName;
-  updateHPBars(100,100);
-
-  $("round-header").textContent="Losowanie mapy...";
-  $("round-details").textContent =
-    "Najpierw losuje się mapa i premia do jednej statystyki.\n" +
-    "Potem 5 ataków – losujesz atak (slot), potem klikasz „Zaatakuj”.";
-
-  $("next-round-label").textContent="Atak 1/5 – kliknij „Losuj atak”.";
-  $("btn-next-round").textContent="Losuj atak";
-  $("btn-next-round").disabled=false;
-
-  $("slot-player-icon").src="kolo_fortuny.png";
-  $("slot-bot-icon").src="kolo_fortuny.png";
-  $("slot-player-mult").textContent="x?";
-  $("slot-bot-mult").textContent="x?";
-
-  hideAttackMarkers();
-
-  renderElementsLists();
-  renderFighterIcons();
-  renderRoundsList();
-  renderMapPlaceholder();
-  renderCountersSummary();
-  renderCountersLegend();
-
-  $("fighters-row").classList.remove("show");
-
-  startMapSlotAnimation();
-
-  $("rounds-list").innerHTML = "";
-}
-
-function renderMapPlaceholder(){
-  const arena=$("battle-arena");
-  arena.classList.remove("map-final-pop");
-  arena.style.backgroundImage='url("tlo.png")';
-
-  $("map-name").textContent="Losowanie mapy...";
-  $("map-buff-text").textContent="Premia: ...";
-  $("map-buff-icon").src="strength.png";
-
-  $("map-multiplier").textContent =
-    `Mnożnik puli: x${gameState.multiplier} • Możliwa wygrana: ${gameState.stake*2*gameState.multiplier} pkt`;
-}
-
-/* animacja losowania mapy */
-
-function startMapSlotAnimation(){
-  const arena=$("battle-arena");
-  const nameEl=$("map-name");
-  const buffTextEl=$("map-buff-text");
-  const buffIconEl=$("map-buff-icon");
-
-  let steps=18;
-  let totalDelay=0;
-
-  for(let i=0;i<steps;i++){
-    const delay=60 + i*25;
-    totalDelay+=delay;
-    setTimeout(()=>{
-      const tmpMap=randomFromArray(MAPS);
-      const tmpStat=STATS[tmpMap.statIndex];
-      const tmpPercent=randomBuffPercent();
-
-      arena.style.backgroundImage=`url("${tmpMap.image}")`;
-      nameEl.textContent=`Losowanie: ${tmpMap.name}`;
-      buffTextEl.textContent=`Premia: +${tmpPercent}% do ${tmpStat.name}`;
-      buffIconEl.src=tmpStat.icon;
-    }, totalDelay);
-  }
-
-  const finalMap=gameState.map;
-  const finalStat=STATS[finalMap.statIndex];
-
-  setTimeout(()=>{
-    arena.style.backgroundImage=`url("${finalMap.image}")`;
-    nameEl.textContent=`Prawie... ${finalMap.name}`;
-    buffTextEl.textContent=`Premia: +${randomBuffPercent()}% do ${finalStat.name}`;
-    buffIconEl.src=finalStat.icon;
-  }, totalDelay+120);
-
-  setTimeout(()=>{
-    arena.style.backgroundImage=`url("${finalMap.image}")`;
-    nameEl.textContent=finalMap.name;
-    buffTextEl.textContent=`Premia: +${gameState.mapBuffPercent}% do ${finalStat.name}`;
-    buffIconEl.src=finalStat.icon;
-
-    arena.classList.remove("map-final-pop");
-    void arena.offsetWidth;
-    arena.classList.add("map-final-pop");
-
-    $("map-multiplier").textContent =
-      `Mnożnik puli: x${gameState.multiplier} • Możliwa wygrana: ${gameState.stake*2*gameState.multiplier} pkt`;
-
-    gameState.mapSlotDone=true;
-    renderElementsLists();
-    renderFighterIcons();
-    renderCountersSummary();
-    renderCountersLegend();
-
-    $("fighters-row").classList.add("show");
-  }, totalDelay+420);
-}
-
-function updateHPBars(pHP,bHP){
-  gameState.playerHP=pHP;
-  gameState.botHP=bHP;
-  $("hp-player-fill").style.width=`${Math.max(0,Math.min(100,pHP))}%`;
-  $("hp-bot-fill").style.width=`${Math.max(0,Math.min(100,bHP))}%`;
-  $("hp-player-text").textContent=`${Math.max(0,pHP)} / 100 HP`;
-  $("hp-bot-text").textContent=`${Math.max(0,bHP)} / 100 HP`;
-}
-
-/* listy statów – ukryte */
-
-function renderElementsLists(){
-  const pList=$("player-elements-list");
-  const bList=$("bot-elements-list");
-  if(!pList || !bList) return;
-  pList.innerHTML="";
-  bList.innerHTML="";
-
-  STATS.forEach((st,idx)=>{
-    const boosted = gameState.map &&
-                    gameState.map.statIndex===idx &&
-                    gameState.mapSlotDone;
-
-    const liP=document.createElement("li");
-    liP.textContent = boosted
-      ? `${st.name}: ${gameState.playerStats[idx]} (+${gameState.mapBuffPercent}%)`
-      : `${st.name}: ${gameState.playerStats[idx]}`;
-    pList.appendChild(liP);
-
-    const liB=document.createElement("li");
-    liB.textContent = boosted
-      ? `${st.name}: ${gameState.botStats[idx]} (+${gameState.mapBuffPercent}%)`
-      : `${st.name}: ${gameState.botStats[idx]}`;
-    bList.appendChild(liB);
-  });
-}
-
-/* ikony za postaciami */
-
-function renderFighterIcons(){
-  const pBox=$("player-icons");
-  const bBox=$("bot-icons");
-  pBox.innerHTML="";
-  bBox.innerHTML="";
-
-  STATS.forEach((st,idx)=>{
-    const boosted =
-      gameState.map && gameState.map.statIndex===idx && gameState.mapSlotDone;
-
-    const pRow=document.createElement("div");
-    pRow.className="fighter-icon-row";
-    if(boosted) pRow.classList.add("fighter-icon-boosted");
-    if(gameState.lastCountersPlayerUsed.includes(idx)){
-      pRow.classList.add("fighter-icon-counter-player");
-    }
-    if(gameState.activePlayerStatIndex === idx){
-      pRow.classList.add("fighter-icon-active-player");
-    }
-    const pImg=document.createElement("img");
-    pImg.src=st.icon; pImg.alt=st.name;
-    const pText=document.createElement("div");
-    pText.className="fighter-icon-text";
-    const pName=document.createElement("div");
-    pName.className="fighter-icon-name";
-    pName.textContent=st.name;
-    const pVal=document.createElement("div");
-    pVal.className="fighter-icon-value";
-    pVal.textContent = boosted
-      ? `${gameState.playerStats[idx]} pkt (+${gameState.mapBuffPercent}%)`
-      : `${gameState.playerStats[idx]} pkt`;
-    pText.appendChild(pName); pText.appendChild(pVal);
-    pRow.appendChild(pImg); pRow.appendChild(pText);
-    pBox.appendChild(pRow);
-
-    const bRow=document.createElement("div");
-    bRow.className="fighter-icon-row";
-    if(boosted) bRow.classList.add("fighter-icon-boosted");
-    if(gameState.lastCountersBotUsed.includes(idx)){
-      bRow.classList.add("fighter-icon-counter-bot");
-    }
-    if(gameState.activeBotStatIndex === idx){
-      bRow.classList.add("fighter-icon-active-bot");
-    }
-    const bImg=document.createElement("img");
-    bImg.src=st.icon; bImg.alt=st.name;
-    const bText=document.createElement("div");
-    bText.className="fighter-icon-text";
-    const bName=document.createElement("div");
-    bName.className="fighter-icon-name";
-    bName.textContent=st.name;
-    const bVal=document.createElement("div");
-    bVal.className="fighter-icon-value";
-    bVal.textContent = boosted
-      ? `${gameState.botStats[idx]} pkt (+${gameState.mapBuffPercent}%)`
-      : `${gameState.botStats[idx]} pkt`;
-    bText.appendChild(bName); bText.appendChild(bVal);
-    bRow.appendChild(bImg); bRow.appendChild(bText);
-    bBox.appendChild(bRow);
-  });
-}
-
-/* BAR KONTR – ile kto ma punktów w statystykach, które KONTRUJĄ daną statę */
-
-function renderCountersSummary(){
-  const wrap=$("counters-summary");
-  if(!wrap) return;
-  wrap.innerHTML="";
-
-  STATS.forEach((st,idx)=>{
-    const counters = COUNTERS[idx] || [];
-    let me=0, bot=0;
-    counters.forEach(ci=>{
-      me  += gameState.playerStats[ci] || 0;
-      bot += gameState.botStats[ci]   || 0;
-    });
-
-    const pill=document.createElement("div");
-    pill.className="counters-summary-pill";
-
-    if(gameState.activePlayerStatIndex === idx){
-      pill.classList.add("active-player");
-    }
-    if(gameState.activeBotStatIndex === idx){
-      pill.classList.add("active-bot");
-    }
-
-    const img=document.createElement("img");
-    img.src=st.icon;
-    img.alt=st.name;
-
-    const text=document.createElement("span");
-    text.innerHTML =
-      `<strong>${st.name}</strong> • ` +
-      `<span class="me">Ty: ${me}</span> pkt, ` +
-      `<span class="bot">Bot: ${bot}</span> pkt`;
-
-    pill.appendChild(img);
-    pill.appendChild(text);
-    wrap.appendChild(pill);
-  });
-}
-
-/* LEGENDA KONTR */
-
-function renderCountersLegend(){
-  const wrap=$("counters-legend");
-  if(!wrap) return;
-  wrap.innerHTML="";
-
-  STATS.forEach((st,idx)=>{
-    const card=document.createElement("div");
-    card.className="counter-card";
-
-    if(gameState.lastCountersPlayerUsed.includes(idx)){
-      card.classList.add("used-player");
-    }
-    if(gameState.lastCountersBotUsed.includes(idx)){
-      card.classList.add("used-bot");
-    }
-    if(gameState.activePlayerStatIndex === idx){
-      card.classList.add("active-player");
-    }
-    if(gameState.activeBotStatIndex === idx){
-      card.classList.add("active-bot");
-    }
-
-    const header=document.createElement("div");
-    header.className="counter-header";
-    const img=document.createElement("img");
-    img.src=st.icon; img.alt=st.name;
-    const name=document.createElement("div");
-    name.className="counter-name";
-    name.textContent=st.name;
-    header.appendChild(img); header.appendChild(name);
-
-    const beats=BEATS[idx] || [];
-    const counters=COUNTERS[idx] || [];
-
-    const line1=document.createElement("div");
-    line1.className="counter-line";
-    line1.innerHTML =
-      `<span class="counter-strong">Mocny na:</span> ${
-        beats.length ? beats.map(i=>STATS[i].name).join(", ") : "—"
-      }`;
-
-    const line2=document.createElement("div");
-    line2.className="counter-line";
-    line2.innerHTML =
-      `<span class="counter-weak">Słaby przeciw:</span> ${
-        counters.length ? counters.map(i=>STATS[i].name).join(", ") : "—"
-      }`;
-
-    card.appendChild(header);
-    card.appendChild(line1);
-    card.appendChild(line2);
-    wrap.appendChild(card);
-  });
-}
-
-/* lista rund – log (schowany w UI, ale zostawiam) */
-
-function renderRoundsList(){
-  const c=$("rounds-list");
-  if(!c) return;
-  c.innerHTML="";
-  if(!gameState.rounds.length){
-    c.textContent="Rundy zostaną pokazane po rozpoczęciu walki.";
+  const sameLevelRooms = rooms.filter(r => r.level === currentLevelId);
+  if (!sameLevelRooms.length) {
+    roomsListEl.innerHTML = '<div class="room-empty">Brak pokoi na tym poziomie. Stwórz swój.</div>';
     return;
   }
-  gameState.rounds.forEach((r,i)=>{
-    const pStat=STATS[r.playerStatIndex];
-    const bStat=STATS[r.botStatIndex];
-    const row=document.createElement("div");
-    row.className="round-row";
-    const left=document.createElement("div");
-    left.className="round-row-left";
-    const name=document.createElement("div");
-    name.className="round-row-name";
-    name.textContent=`Atak ${i+1}/5`;
-    const stats=document.createElement("div");
-    stats.className="round-row-stats";
-    stats.textContent=
-      `Ty: ${pStat.name} (x${r.playerWeight}) • Bot: ${bStat.name} (x${r.botWeight})`;
-    left.appendChild(name); left.appendChild(stats);
-    const status=document.createElement("div");
-    status.className="round-row-status";
-    if(i<gameState.currentRoundIndex) status.textContent="✓ Zakończony";
-    else if(i===gameState.currentRoundIndex) status.textContent="▶ Trwa";
-    else status.textContent="… W kolejce";
-    row.appendChild(left); row.appendChild(status);
-    c.appendChild(row);
+
+  sameLevelRooms.forEach(room => {
+    const row = document.createElement('div');
+    row.className = 'room-row' + (currentRoom && currentRoom.id === room.id ? ' active' : '');
+    row.dataset.roomId = room.id;
+
+    row.innerHTML = `
+      <div class="room-main">
+        <div class="room-name">Pokój #${room.id} • ${room.ownerName}</div>
+        <div class="room-meta">Stawka: ${room.stake} pkt • Poziom ${room.level}</div>
+      </div>
+      <button class="secondary small" data-room-id="${room.id}">
+        ${currentRoom && currentRoom.id === room.id ? 'Wybrany' : 'Wejdź'}
+      </button>
+    `;
+    roomsListEl.appendChild(row);
   });
 }
 
-/* ========== KLIK DÓŁ – LOSUJ / ZAATAKUJ ========== */
+function selectRoomById(id) {
+  const room = rooms.find(r => r.id === id);
+  if (!room) return;
+  currentRoom = room;
+  stakePerPlayer = room.stake;
+  renderRooms();
+  if (buildConfirmBtn) buildConfirmBtn.disabled = !currentRoom;
+}
 
-function handleNextRoundClick(){
-  if(!gameState.mapSlotDone){
-    alert("Poczekaj, aż wylosuje się mapa i premia.");
-    return;
-  }
-  if(gameState.isRoundAnimating) return;
+// ===== HUD / LEVEL =====
 
-  const total=gameState.rounds.length;
+function updateLevelUI() {
+  currentLevelId = computeLevelFromWins(consecutiveWins);
+  const cfg = getLevelConfig(currentLevelId);
+  const nextLevel = LEVELS.find(l => l.id === currentLevelId + 1);
 
-  // jeśli runda jest przygotowana – ten klik = ZAATAKUJ
-  if(gameState.preparedRoundIndex !== null){
-    const idx=gameState.preparedRoundIndex;
-    executeRound(idx);
-    gameState.preparedRoundIndex=null;
+  if (levelBadgeEl) levelBadgeEl.textContent = cfg.label;
 
-    if(idx===total-1){
-      $("btn-next-round").textContent="Pokaż wynik pojedynku";
-      $("next-round-label").textContent="Pojedynek zakończony – zobacz wynik.";
+  if (streakInfoEl) {
+    if (nextLevel) {
+      const left = Math.max(0, nextLevel.winsFloor - consecutiveWins);
+      streakInfoEl.textContent =
+        `Wygrane z rzędu: ${consecutiveWins} / ${nextLevel.winsFloor} (brakuje ${left})`;
     } else {
-      $("btn-next-round").textContent="Losuj atak";
-      $("next-round-label").textContent=`Atak ${idx+2}/5 – kliknij „Losuj atak”.`;
+      streakInfoEl.textContent = `Wygrane z rzędu: ${consecutiveWins} • max poziom`;
     }
-    hideAttackMarkers();
+  }
+
+  if (matchmakingInfoEl) {
+    matchmakingInfoEl.textContent = `Widzisz tylko pokoje graczy na poziomie ${cfg.id}.`;
+  }
+
+  if (buildMapLevelChipEl) buildMapLevelChipEl.textContent = cfg.label;
+  if (buildSkillRangeEl)    buildSkillRangeEl.textContent = `Sloty x1–x3`;
+
+  if (battlePlayerLevelEl) battlePlayerLevelEl.textContent = `Twój poziom: ${cfg.id}`;
+  if (battleBotLevelEl) {
+    const botLevelText = currentMatchLevelId || cfg.id;
+    battleBotLevelEl.textContent = `Przeciwnik: poziom ${botLevelText}`;
+  }
+
+  ensureRoomsForLevel(cfg.id);
+}
+
+function setHpBars() {
+  playerHpTextEl.textContent = `${player.hp} / ${HP_MAX} HP`;
+  botHpTextEl.textContent    = `${bot.hp} / ${HP_MAX} HP`;
+  playerHpBarEl.style.width  = `${(player.hp/HP_MAX)*100}%`;
+  botHpBarEl.style.width     = `${(bot.hp/HP_MAX)*100}%`;
+}
+
+function setLog(text) {
+  if (logBoxEl) logBoxEl.textContent = text;
+}
+
+function spawnFloatingDmg(side, amount) {
+  const el = side === 'player' ? playerFloatingDmg : botFloatingDmg;
+  el.textContent = amount > 0 ? `-${amount}` : '0';
+  el.classList.remove('show');
+  el.style.left   = side === 'player' ? '26%' : '74%';
+  el.style.bottom = '64%';
+  void el.offsetWidth;
+  el.classList.add('show');
+
+  const hpBar = side === 'player' ? playerHpBarEl : botHpBarEl;
+  hpBar.classList.add('hit');
+  setTimeout(()=>hpBar.classList.remove('hit'), 250);
+}
+
+function resetStatHighlights() {
+  [...playerStatsStackEl.children, ...botStatsStackEl.children].forEach(el => {
+    el.classList.remove('huge-atk','huge-def','bonus-pulse','shake');
+    const atkNum = el.querySelector('.atk-num');
+    if (atkNum && el.dataset.atkBase !== undefined) {
+      atkNum.textContent = el.dataset.atkBase;
+      atkNum.classList.remove('stat-num-boost');
+    }
+  });
+  [...counterRowEl.children].forEach(el => el.classList.remove('active','shake'));
+  [...counterLegendEl.querySelectorAll('span')].forEach(el => el.classList.remove('active'));
+  centerVsEl.classList.remove('visible','bonus-pulse','shake');
+
+  playerFrontValue.classList.remove('show');
+  botFrontValue.classList.remove('show');
+  playerFrontValue.textContent = '';
+  botFrontValue.textContent    = '';
+}
+
+// powiększona liczba MOC + dymek x2
+function showStatMultiplier(attackerSide, statId, mult) {
+  const isPlayer = attackerSide === 'player';
+  const stackEl  = isPlayer ? playerStatsStackEl : botStatsStackEl;
+  const badge    = stackEl.querySelector(`[data-stat-id="${statId}"]`);
+  if (!badge) return;
+
+  const atkNumEl = badge.querySelector('.atk-num');
+  if (!atkNumEl) return;
+
+  const basePoints = (isPlayer ? player.stats[statId] : bot.stats[statId]) || 0;
+  badge.dataset.atkBase = basePoints;
+  atkNumEl.textContent  = basePoints * mult;
+  atkNumEl.classList.add('stat-num-boost');
+
+  const bubble = document.createElement('div');
+  bubble.className = 'stat-mult-bubble';
+  bubble.textContent = 'x' + mult;
+  badge.appendChild(bubble);
+
+  setTimeout(() => {
+    bubble.classList.add('hide');
+    setTimeout(() => bubble.remove(), 250);
+  }, 1500);
+}
+
+function showFrontValues(attackerSide, atkValue, defValue) {
+  const isPlayer = attackerSide === 'player';
+  const atkEl = isPlayer ? playerFrontValue : botFrontValue;
+  const defEl = isPlayer ? botFrontValue    : playerFrontValue;
+
+  atkEl.innerHTML = `<img src="sword.png" alt=""> ${atkValue}`;
+  defEl.innerHTML = `<img src="shield.png" alt=""> ${defValue}`;
+
+  atkEl.classList.add('show');
+  defEl.classList.add('show');
+}
+
+function highlightResetButton() {
+  if (!resetBtn) return;
+  resetBtn.classList.remove('cta-pulse');
+  void resetBtn.offsetWidth;
+  resetBtn.classList.add('cta-pulse');
+}
+
+// UNIK
+
+function ensureDodgeBanner() {
+  if (!dodgeBannerEl) {
+    dodgeBannerEl = document.createElement('div');
+    dodgeBannerEl.className = 'dodge-banner';
+    dodgeBannerEl.textContent = 'UNIK!';
+    document.querySelector('.arena-shell').appendChild(dodgeBannerEl);
+  }
+}
+
+function showDodge() {
+  ensureDodgeBanner();
+  dodgeBannerEl.classList.remove('show');
+  void dodgeBannerEl.offsetWidth;
+  dodgeBannerEl.classList.add('show');
+
+  const shakeEls = [
+    ...document.querySelectorAll('.stat-badge'),
+    ...document.querySelectorAll('.slot'),
+    playerSpriteEl,
+    botSpriteEl,
+    bigMapIcon,
+    centerVsEl,
+  ].filter(Boolean);
+
+  shakeEls.forEach(el => el.classList.add('shake'));
+  setTimeout(() => {
+    shakeEls.forEach(el => el.classList.remove('shake'));
+  }, 900);
+}
+
+// animacja końca walki – pełny ekran
+function playOutcomeAnimation(kind, onDone) {
+  if (!deathOverlayEl || !deathVideoEl) {
+    highlightResetButton();
+    if (onDone) onDone();
     return;
   }
 
-  // nie ma przygotowanej rundy -> LOSUJEMY NASTĘPNY ATAK
-  const nextIndex=gameState.currentRoundIndex+1;
-  if(nextIndex>=total){
-    endBattleAndShowResult();
-    return;
-  }
+  const src = kind === 'win' ? 'Win_screen.mp4' : 'Smierc.mp4';
+  deathOverlayEl.classList.add('show');
+  deathVideoEl.pause();
+  deathVideoEl.src = src;
+  deathVideoEl.load();
+  deathVideoEl.currentTime = 0;
 
-  gameState.isRoundAnimating=true;
-  startRoundSlotAnimation(nextIndex,()=>{
-    gameState.preparedRoundIndex=nextIndex;
-    gameState.isRoundAnimating=false;
-    $("btn-next-round").textContent="Zaatakuj";
-  });
-}
-
-/* slot na dół – emotki + mnożniki + info o mocy i kontrach */
-
-function startRoundSlotAnimation(roundIndex,cb){
-  const total=gameState.rounds.length;
-  const label=$("next-round-label");
-  const iconP=$("slot-player-icon");
-  const iconB=$("slot-bot-icon");
-  const multP=$("slot-player-mult");
-  const multB=$("slot-bot-mult");
-
-  const r=gameState.rounds[roundIndex];
-  const pStatFinal=STATS[r.playerStatIndex];
-  const bStatFinal=STATS[r.botStatIndex];
-
-  let steps=18;
-  let totalDelay=0;
-
-  for(let i=0;i<steps;i++){
-    const delay=60 + i*22;
-    totalDelay+=delay;
-    setTimeout(()=>{
-      const tmpP=randomFromArray(STATS);
-      const tmpB=randomFromArray(STATS);
-      const tmpWp=randomRoundWeight();
-      const tmpWb=randomRoundWeight();
-
-      iconP.src=tmpP.icon;
-      iconB.src=tmpB.icon;
-      multP.textContent=`x${tmpWp}`;
-      multB.textContent=`x${tmpWb}`;
-      label.textContent=
-        `Losowanie ataku ${roundIndex+1}/${total}: Ty – ${tmpP.name} (x${tmpWp}), `+
-        `Bot – ${tmpB.name} (x${tmpWb})`;
-    }, totalDelay);
-  }
-
-  setTimeout(()=>{
-    iconP.src=pStatFinal.icon;
-    iconB.src=bStatFinal.icon;
-    multP.textContent=`x${randomRoundWeight()}`;
-    multB.textContent=`x${randomRoundWeight()}`;
-    label.textContent=
-      `Prawie: Ty – ${pStatFinal.name}, Bot – ${bStatFinal.name}`;
-  }, totalDelay+120);
-
-  setTimeout(()=>{
-    iconP.src=pStatFinal.icon;
-    iconB.src=bStatFinal.icon;
-    multP.textContent=`x${r.playerWeight}`;
-    multB.textContent=`x${r.botWeight}`;
-
-    const prevPlayerAtt = computeAttackForStat(gameState.playerStats, gameState.botStats, r.playerStatIndex);
-    const prevBotAtt    = computeAttackForStat(gameState.botStats,   gameState.playerStats, r.botStatIndex);
-    const playerPredDmg = Math.max(0, Math.round(prevPlayerAtt.attackAfterCounters * r.playerWeight));
-    const botPredDmg    = Math.max(0, Math.round(prevBotAtt.attackAfterCounters * r.botWeight));
-
-    label.textContent =
-      `Atak ${roundIndex+1}/${total}: Ty – ${pStatFinal.name} (x${r.playerWeight}, ~${playerPredDmg} dmg, ` +
-      `kontry wroga: ${prevPlayerAtt.countersPoints} pkt), ` +
-      `Bot – ${bStatFinal.name} (x${r.botWeight}, ~${botPredDmg} dmg, ` +
-      `Twoje kontry: ${prevBotAtt.countersPoints} pkt).`;
-
-    // ustaw aktywne staty (do podświetleń)
-    gameState.activePlayerStatIndex = r.playerStatIndex;
-    gameState.activeBotStatIndex    = r.botStatIndex;
-    renderCountersSummary();
-    renderCountersLegend();
-    renderFighterIcons();
-
-    // markery "atak"
-    const txtP=$("attack-marker-player-text");
-    const txtB=$("attack-marker-bot-text");
-    txtP.textContent =
-      `ATAK • ${pStatFinal.name} x${r.playerWeight}\n`+
-      `Moc ~${playerPredDmg} | kontry wroga: ${prevPlayerAtt.countersPoints} pkt`;
-    txtB.textContent =
-      `ATAK • ${bStatFinal.name} x${r.botWeight}\n`+
-      `Moc ~${botPredDmg} | Twoje kontry: ${prevBotAtt.countersPoints} pkt`;
-    $("attack-marker-player").classList.add("show");
-    $("attack-marker-bot").classList.add("show");
-
-    cb();
-  }, totalDelay+380);
-}
-
-function hideAttackMarkers(){
-  $("attack-marker-player").classList.remove("show");
-  $("attack-marker-bot").classList.remove("show");
-}
-
-/* LICZENIE OBRAŻEŃ */
-
-function computeAttackForStat(attackerStats,defenderStats,statIndex){
-  const basePoints=attackerStats[statIndex];
-  const attackBase=basePoints*10;
-
-  let attackAfterBuff=attackBase;
-  let buffApplied=false;
-  if(gameState.map && gameState.map.statIndex===statIndex && gameState.mapSlotDone){
-    attackAfterBuff=Math.round(attackBase*(1+gameState.mapBuffPercent/100));
-    buffApplied=true;
-  }
-
-  const counterIndices=COUNTERS[statIndex]||[];
-  const breakdown=[];
-  let countersPoints=0;
-  counterIndices.forEach(idx=>{
-    const pts=defenderStats[idx];
-    breakdown.push({idx,points:pts});
-    countersPoints+=pts;
+  deathVideoEl.play().catch(() => {
+    deathOverlayEl.classList.remove('show');
+    highlightResetButton();
+    if (onDone) onDone();
   });
 
-  // KONTRY trochę słabsze – 75% dawnego efektu
-  const penalty = Math.round(countersPoints * 10 * 0.75);
-
-  let attackAfterCounters=attackAfterBuff-penalty;
-  if(attackAfterCounters<0) attackAfterCounters=0;
-
-  return {
-    basePoints,
-    attackBase,
-    attackAfterBuff,
-    buffApplied,
-    countersPoints,
-    penalty,
-    attackAfterCounters,
-    countersBreakdown:breakdown,
+  deathVideoEl.onended = () => {
+    deathOverlayEl.classList.remove('show');
+    highlightResetButton();
+    if (onDone) onDone();
   };
 }
 
-/* wykonanie rundy po kliknięciu "Zaatakuj" */
+// ===== BUILD UI =====
 
-function executeRound(roundIndex){
-  const r=gameState.rounds[roundIndex];
-  const pIdx=r.playerStatIndex;
-  const bIdx=r.botStatIndex;
-  const wp=r.playerWeight;
-  const wb=r.botWeight;
+function renderBuildScreen() {
+  buildStatsList.innerHTML = '';
+  for (const stat of STATS) {
+    const row = document.createElement('div');
+    row.className = 'build-row';
+    row.dataset.statId = stat.id;
+    const buttons = Array.from({ length: 11 }, (_, i) => {
+      return `<button class="value-btn" data-value="${i}">${i}</button>`;
+    }).join('');
 
-  const pStat=STATS[pIdx];
-  const bStat=STATS[bIdx];
-
-  const pAtt=computeAttackForStat(gameState.playerStats,gameState.botStats,pIdx);
-  const bAtt=computeAttackForStat(gameState.botStats,gameState.playerStats,bIdx);
-
-  const pDamagePlanned = pAtt.attackAfterBuff * wp;
-  const bDamagePlanned = bAtt.attackAfterBuff * wb;
-
-  const pDmg=Math.max(0,Math.round(pAtt.attackAfterCounters*wp));
-  const bDmg=Math.max(0,Math.round(bAtt.attackAfterCounters*wb));
-
-  const newPHP=Math.max(0,gameState.playerHP-bDmg);
-  const newBHP=Math.max(0,gameState.botHP-pDmg);
-
-  // zapamiętaj użyte kontry
-  gameState.lastCountersBotUsed =
-    pAtt.countersBreakdown.filter(c=>c.points>0).map(c=>c.idx);
-  gameState.lastCountersPlayerUsed =
-    bAtt.countersBreakdown.filter(c=>c.points>0).map(c=>c.idx);
-
-  gameState.currentRoundIndex=roundIndex;
-  updateHPBars(newPHP,newBHP);
-  renderElementsLists();
-  renderFighterIcons();
-  renderRoundsList();
-  renderCountersLegend();
-  renderCountersSummary();
-
-  $("map-multiplier").textContent =
-    `Runda ${roundIndex+1}/5 • Ty: ${pStat.name} (x${wp}) • Bot: ${bStat.name} (x${wb})`;
-
-  const pFormula=`Plan: ${pDamagePlanned} • tarcza: −${pDamagePlanned-pDmg}`;
-  const bFormula=`Plan: ${bDamagePlanned} • tarcza: −${bDamagePlanned-bDmg}`;
-
-  showDamagePopup("bot",pDmg,pFormula);
-  showDamagePopup("player",bDmg,bFormula);
-  showShieldPopup("bot",pAtt);
-  showShieldPopup("player",bAtt);
-
-  const maxPlayerStat = Math.max(...gameState.playerStats);
-  const isPowerHit = gameState.playerStats[pIdx] === maxPlayerStat && maxPlayerStat>0;
-
-  hitAnimation("player-panel", isPowerHit);
-  hitAnimation("bot-panel", false);
-
-  if(isPowerHit){
-    const ring = document.querySelector(".slot-icon-ring");
-    if(ring){
-      ring.classList.remove("power-hit");
-      void ring.offsetWidth;
-      ring.classList.add("power-hit");
-    }
-    const arena=$("battle-arena");
-    if(arena){
-      arena.classList.remove("hit-shake-strong");
-      void arena.offsetWidth;
-      arena.classList.add("hit-shake-strong");
-    }
+    row.innerHTML = `
+      <img src="${stat.icon}" alt="${stat.name}">
+      <div class="build-row-name">
+        <span>${stat.name}</span>
+        <span>${stat.desc}</span>
+      </div>
+      <div class="build-row-controls">
+        ${buttons}
+      </div>
+    `;
+    buildStatsList.appendChild(row);
   }
-
-  let t="";
-  t+=`Ty – ${pStat.name}\n`;
-  t+=`• Bazowo: ${pAtt.basePoints} pkt → ${pAtt.attackBase} mocy\n`;
-  t+=pAtt.buffApplied
-      ? `• Premia mapy: +${gameState.mapBuffPercent}% → ${pAtt.attackAfterBuff} mocy\n`
-      : `• Premia mapy: brak → ${pAtt.attackAfterBuff} mocy\n`;
-  t+=`• Kontry przeciwnika: ${
-    pAtt.countersBreakdown.filter(c=>c.points>0)
-       .map(c=>`${STATS[c.idx].name}(${c.points})`).join(", ") || "brak"
-  } → −${pAtt.penalty} mocy\n`;
-  t+=`• Planowany dmg: ${pDamagePlanned}, po tarczy: ${pDmg}\n\n`;
-
-  t+=`Bot – ${bStat.name}\n`;
-  t+=`• Bazowo: ${bAtt.basePoints} pkt → ${bAtt.attackBase} mocy\n`;
-  t+=bAtt.buffApplied
-      ? `• Premia mapy: +${gameState.mapBuffPercent}% → ${bAtt.attackAfterBuff} mocy\n`
-      : `• Premia mapy: brak → ${bAtt.attackAfterBuff} mocy\n`;
-  t+=`• Twoje kontry: ${
-    bAtt.countersBreakdown.filter(c=>c.points>0)
-       .map(c=>`${STATS[c.idx].name}(${c.points})`).join(", ") || "brak"
-  } → −${bAtt.penalty} mocy\n`;
-  t+=`• Planowany dmg: ${bDamagePlanned}, po tarczy: ${bDmg}\n\n`;
-  t+=`HP po rundzie: Ty ${newPHP} / 100, Bot ${newBHP} / 100`;
-
-  $("round-details").textContent=t;
+  updateBuildUI();
 }
 
-/* dymki dmg */
+function openBuildScreen(resetPoints = false) {
+  if (resetPoints) {
+    playerAllocation = { STR:0, END:0, SPD:0, TAC:0, STA:0 };
+  }
+  renderBuildScreen();
+  rollMap(playerAllocation, currentLevelId);
+  updateLevelUI();
+  showScreen('build');
+}
 
-function showDamagePopup(target,amount,infoText){
-  const el=target==="player" ? $("damage-player") : $("damage-bot");
-  if(!el) return;
+function totalAllocated() {
+  return Object.values(playerAllocation).reduce((a,b)=>a+b,0);
+}
 
-  if(amount<=0){
-    el.textContent=`0 dmg\nTarcza zgasiła atak.`;
+function updateBuildUI() {
+  const left = STAT_POINTS_TOTAL - totalAllocated();
+  pointsLeftEl.textContent = `Pozostało punktów: ${left}`;
+
+  // Można wejść na arenę od razu, jeśli jest wybrany pokój
+  buildConfirmBtn.disabled = !currentRoom;
+
+  for (const row of buildStatsList.children) {
+    const id = row.dataset.statId;
+    const currentVal = playerAllocation[id];
+    const totalWithout = totalAllocated() - currentVal;
+    const maxForRow = STAT_POINTS_TOTAL - totalWithout;
+
+    row.querySelectorAll('.value-btn').forEach(btn => {
+      const val = Number(btn.dataset.value);
+      btn.classList.toggle('active', val === currentVal);
+      btn.disabled = val > maxForRow;
+    });
+  }
+}
+
+// ===== RENDER STATÓW NA ARENIE =====
+
+function buildStatStacks() {
+  playerStatsStackEl.innerHTML = '';
+  botStatsStackEl.innerHTML    = '';
+
+  for (const stat of STATS) {
+    const p = document.createElement('div');
+    p.className = 'stat-badge';
+    p.dataset.statId = stat.id;
+    p.innerHTML = `
+      <img src="${stat.icon}" alt="${stat.name}">
+      <div class="stat-num atk-num">${player.stats[stat.id] || 0}</div>
+      <div class="stat-num def-num">${player.stats[stat.id] || 0}</div>
+    `;
+    playerStatsStackEl.appendChild(p);
+
+    const b = document.createElement('div');
+    b.className = 'stat-badge';
+    b.dataset.statId = stat.id;
+    b.innerHTML = `
+      <img src="${stat.icon}" alt="${stat.name}">
+      <div class="stat-num atk-num">${bot.stats[stat.id] || 0}</div>
+      <div class="stat-num def-num">${bot.stats[stat.id] || 0}</div>
+    `;
+    botStatsStackEl.appendChild(b);
+  }
+}
+
+function renderCounterRow() {
+  counterRowEl.innerHTML = '';
+  for (const stat of STATS) {
+    const chip = document.createElement('div');
+    chip.className = 'counter-chip';
+    chip.dataset.statId = stat.id;
+    chip.innerHTML = `
+      <img src="${stat.icon}" alt="${stat.name}">
+      <span>${stat.name}</span>
+      <span>Ty: <span class="me">${player.stats[stat.id] || 0}</span></span>
+      <span>|</span>
+      <span>Przeciwnik: <span class="bot">${bot.stats[stat.id] || 0}</span></span>
+    `;
+    counterRowEl.appendChild(chip);
+  }
+}
+
+function highlightForAttack(attackerSide, statId, defenderCounterIds) {
+  resetStatHighlights();
+
+  const atkStack = attackerSide === 'player' ? playerStatsStackEl : botStatsStackEl;
+  const defStack = attackerSide === 'player' ? botStatsStackEl    : playerStatsStackEl;
+
+  const atkBadge = atkStack.querySelector(`[data-stat-id="${statId}"]`);
+  if (atkBadge) atkBadge.classList.add('huge-atk');
+
+  defenderCounterIds.forEach(id => {
+    const bdg = defStack.querySelector(`[data-stat-id="${id}"]`);
+    if (bdg) bdg.classList.add('huge-def');
+  });
+
+  const chip = counterRowEl.querySelector(`[data-stat-id="${statId}"]`);
+  if (chip) chip.classList.add('active');
+
+  [...counterLegendEl.querySelectorAll('span')].forEach(el => {
+    el.dataset.stat === statId
+      ? el.classList.add('active')
+      : el.classList.remove('active');
+  });
+}
+
+// ===== SLOTY =====
+
+function updateSlotsUnknown() {
+  playerSlotStatEl.textContent = '?';
+  playerSlotMultEl.textContent = 'x?';
+  playerSlotIconEl.src         = 'strength.png';
+
+  botSlotStatEl.textContent    = '?';
+  botSlotMultEl.textContent    = 'x?';
+  botSlotIconEl.src            = 'strength.png';
+}
+
+// losowanie: najpierw stat, potem mnożnik 1–3
+async function spinSlot(slotEl, iconEl, statTextEl, multEl, targetStatId, targetMult, multRange = { min: 1, max: 3 }) {
+  slotEl.classList.add('spin');
+  const spins = 10;
+  for (let i = 0; i < spins; i++) {
+    const final = i === spins - 1;
+    const stat = final ? STATS.find(s => s.id === targetStatId) : randomChoice(STATS);
+
+    iconEl.src             = stat.icon;
+    statTextEl.textContent = stat.name;
+    multEl.textContent     = 'x?';
+
+    const delay = 70 + i * 35;
+    await wait(delay);
+  }
+  slotEl.classList.remove('spin');
+
+  const realMult = Math.max(1, Math.min(3, targetMult));
+  const steps = Math.max(4, 2 + realMult * 2);
+
+  for (let i = 0; i < steps; i++) {
+    const temp = randomInt(1,3);
+    multEl.textContent = 'x' + temp;
+    await wait(80);
+  }
+  multEl.textContent = 'x' + realMult;
+}
+
+// ===== MAPA =====
+
+function rollMap(statsSource = playerAllocation, levelId = currentLevelId) {
+  const bestId = highestStatId(statsSource);
+  let pool = MAPS;
+
+  if (bestId) {
+    const fav    = MAPS.filter(m => m.buffStat === bestId);
+    const others = MAPS.filter(m => m.buffStat !== bestId);
+    const weighted = [];
+    fav.forEach(m => weighted.push(m, m, m));
+    weighted.push(...others);
+    pool = weighted;
+  }
+
+  currentMap     = randomChoice(pool);
+  mapBuffPercent = randomInt(10,35);
+  poolMultiplier = rollPoolMultiplier(levelId);
+
+  renderMapUI();
+}
+
+function applyThemeForCurrentMap() {
+  if (!currentMap) return;
+  const theme = MAP_THEMES[currentMap.id] || { accent: '#a855f7', accent2: '#ec4899' };
+  const root = document.documentElement;
+  root.style.setProperty('--accent', theme.accent);
+  root.style.setProperty('--accent2', theme.accent2);
+}
+
+function renderMapUI() {
+  if (!currentMap) return;
+  const buffStat = STATS.find(s => s.id === currentMap.buffStat);
+  const buffName = buffStat ? buffStat.name : 'statystyki';
+
+  applyThemeForCurrentMap();
+
+  if (arenaBgEl) {
+    arenaBgEl.src = currentMap.bg;
+    arenaBgEl.currentTime = 0;
+    arenaBgEl.play().catch(()=>{});
+  }
+
+  if (buildMapVideoEl) {
+    buildMapVideoEl.src = currentMap.bg;
+  }
+
+  bigMapIconImg.src = buffStat ? buffStat.icon : 'strength.png';
+
+  mapNameEl.textContent  = currentMap.name;
+  mapBonusEl.textContent = `Premia: +${mapBuffPercent}% do ${buffName}`;
+
+  const totalPool = (stakePerPlayer * 2) * poolMultiplier;
+  poolInfoEl.textContent = `Mnożnik puli: x${poolMultiplier} • Możliwa wygrana: ${totalPool} pkt`;
+
+  if (buildMapNameEl) buildMapNameEl.textContent = currentMap.name;
+  if (buildMapBuffEl) buildMapBuffEl.textContent = `Premia +${mapBuffPercent}% do ${buffName}`;
+
+  const skillMultVal = (1 + mapBuffPercent / 100).toFixed(2);
+  if (buildSkillMultEl) buildSkillMultEl.textContent = `x${skillMultVal}`;
+  if (buildPointMultEl) buildPointMultEl.textContent = `x${poolMultiplier}`;
+}
+
+// ===== OBLICZANIE ATAKU =====
+
+function computeAttack(attacker, defender, statId, roundMult) {
+  const atkStats = attacker.stats;
+  const defStats = defender.stats;
+  const points   = atkStats[statId] || 0;
+
+  const attackBasePoints = points * roundMult;
+
+  const { counterIds, sum: rawCounterPoints } = sumCounters(defStats, statId);
+  const defPoints = rawCounterPoints;
+
+  let beforeBuffPoints = Math.max(0, attackBasePoints - defPoints);
+
+  let buffApplied = false;
+  let attackPointsWithBuff = attackBasePoints;
+
+  if (currentMap && currentMap.buffStat === statId && beforeBuffPoints > 0) {
+    buffApplied = true;
+    attackPointsWithBuff = Math.round(
+      attackBasePoints * (1 + mapBuffPercent / 100)
+    );
+  }
+
+  const finalDmgPoints = Math.max(0, attackPointsWithBuff - defPoints);
+  const finalDmgHp     = finalDmgPoints * POINT_POWER;
+
+  return {
+    points,
+    attackBasePoints,
+    attackPointsWithBuff,
+    counterIds,
+    counterPoints: rawCounterPoints,
+    defPoints,
+    buffApplied,
+    beforeBuffPoints,
+    finalDmgPoints,
+    finalDmgHp,
+  };
+}
+
+// BONUS MAPY
+
+function showMapBonusVisual(bonusPoints) {
+  const arenaShell = document.querySelector('.arena-shell');
+  if (arenaShell) {
+    const banner = document.createElement('div');
+    banner.className = 'map-bonus-banner';
+    banner.textContent = `BONUS MAPY +${bonusPoints} pkt`;
+    arenaShell.appendChild(banner);
+    setTimeout(() => banner.remove(), 2000);
+  }
+
+  const bonusEls = [
+    ...document.querySelectorAll('.stat-badge'),
+    ...document.querySelectorAll('.slot'),
+    centerVsEl,
+    bigMapIcon,
+    playerSpriteEl,
+    botSpriteEl,
+  ].filter(Boolean);
+  bonusEls.forEach(el => el.classList.add('bonus-pulse'));
+  setTimeout(() => {
+    bonusEls.forEach(el => el.classList.remove('bonus-pulse'));
+  }, 2000);
+}
+
+// PREVIEW
+
+async function animatePreview(attackerSide, statId, roundMult) {
+  const isPlayer = attackerSide === 'player';
+  const attacker = isPlayer ? player : bot;
+  const defender = isPlayer ? bot : player;
+
+  const res = computeAttack(attacker, defender, statId, roundMult);
+  const atkStrongId = highestStatId(attacker.stats);
+
+  const { counterIds } = sumCounters(defender.stats, statId);
+
+  highlightForAttack(attackerSide, statId, counterIds);
+
+  const spriteEl = isPlayer ? playerSpriteEl : botSpriteEl;
+  if (atkStrongId === statId) {
+    spriteEl.classList.add('hit-strong');
+    setTimeout(()=>spriteEl.classList.remove('hit-strong'), 450);
+  }
+
+  showStatMultiplier(attackerSide, statId, roundMult);
+
+  const atkPts = res.attackBasePoints;
+  const defPts = res.defPoints;
+
+  centerAtkText.textContent = isPlayer
+    ? `Twoja moc: ${atkPts} pkt`
+    : `Moc przeciwnika: ${atkPts} pkt`;
+  centerDefText.textContent = isPlayer
+    ? `Kontra przeciwnika: ${defPts} pkt`
+    : `Twoja kontra: ${defPts} pkt`;
+  centerDiffText.textContent = `MOC – KONTRA = ${Math.max(0, res.beforeBuffPoints)} pkt`;
+  centerVsEl.classList.add('visible');
+
+  showFrontValues(attackerSide, atkPts, defPts);
+
+  if (res.buffApplied && res.beforeBuffPoints > 0) {
+    await wait(400);
+
+    const bonusPts = Math.max(0, res.attackPointsWithBuff - res.attackBasePoints);
+    const buffedAtk = res.attackPointsWithBuff;
+    const buffedDiff = Math.max(0, buffedAtk - defPts);
+
+    centerAtkText.textContent  = isPlayer
+      ? `Twoja moc z premią mapy: ${buffedAtk} pkt`
+      : `Moc przeciwnika z premią mapy: ${buffedAtk} pkt`;
+    centerDiffText.textContent = `BONUS MAPY +${bonusPts} pkt • MOC – KONTRA = ${buffedDiff} pkt`;
+    showFrontValues(attackerSide, buffedAtk, defPts);
+
+    showMapBonusVisual(bonusPts || 1);
+  }
+
+  await wait(1500);
+  return res;
+}
+
+// ANIMACJA ATAKU
+
+async function animateSingleAttack(attackerSide, statId, roundMult) {
+  const isPlayer = attackerSide === 'player';
+  const attacker = isPlayer ? player : bot;
+  const defender = isPlayer ? bot : player;
+
+  const res   = computeAttack(attacker, defender, statId, roundMult);
+  const atkStrongId = highestStatId(attacker.stats);
+
+  const { counterIds } = sumCounters(defender.stats, statId);
+
+  highlightForAttack(attackerSide, statId, counterIds);
+  centerVsEl.classList.remove('visible');
+
+  const spriteEl = isPlayer ? playerSpriteEl : botSpriteEl;
+  if (atkStrongId === statId) {
+    spriteEl.classList.add('hit-strong');
+    setTimeout(()=>spriteEl.classList.remove('hit-strong'), 450);
+  }
+
+  let dodged = false;
+  if (defender.hp < 30 && randomInt(1,3) === 1) {
+    dodged = true;
+  }
+
+  let dmgToApplyHp;
+  let atkPts, defPts;
+
+  if (dodged) {
+    dmgToApplyHp = 0;
+    atkPts = res.attackPointsWithBuff;
+    defPts = res.defPoints;
+    showDodge();
+    centerAtkText.textContent = isPlayer
+      ? `Twoja moc: ${atkPts} pkt`
+      : `Moc przeciwnika: ${atkPts} pkt`;
+    centerDefText.textContent = isPlayer
+      ? `UNIK! Twoja kontra niepotrzebna`
+      : `UNIK! Kontra przeciwnika niepotrzebna`;
+    centerDiffText.textContent = `0 obrażeń – czysty unik`;
+    centerVsEl.classList.add('visible');
+    showFrontValues(attackerSide, atkPts, defPts);
   } else {
-    el.textContent=`-${amount} HP\n${infoText}`;
+    dmgToApplyHp = res.finalDmgHp;
+    atkPts = res.attackPointsWithBuff;
+    defPts = res.defPoints;
+
+    const dmgPoints = res.finalDmgPoints;
+
+    centerAtkText.textContent = isPlayer
+      ? `Twoja moc: ${atkPts} pkt`
+      : `Moc przeciwnika: ${atkPts} pkt`;
+    centerDefText.textContent = isPlayer
+      ? `Kontra przeciwnika: ${defPts} pkt`
+      : `Twoja kontra: ${defPts} pkt`;
+
+    if (dmgToApplyHp <= 0) {
+      centerDiffText.textContent = `OBRONA – wszystko zablokowane`;
+    } else {
+      centerDiffText.textContent = isPlayer
+        ? `Zadałeś ${dmgToApplyHp} dmg (${dmgPoints} pkt)`
+        : `Dostałeś ${dmgToApplyHp} dmg (${dmgPoints} pkt)`;
+    }
+    centerVsEl.classList.add('visible');
+    showFrontValues(attackerSide, atkPts, defPts);
   }
 
-  el.classList.remove("show");
-  void el.offsetWidth;
-  el.classList.add("show");
+  setLog(isPlayer ? 'Twój atak kontra obrona przeciwnika…' : 'Atak przeciwnika kontra Twoja obrona…');
+
+  await wait(1500);
+
+  if (!dodged && dmgToApplyHp > 0) {
+    defender.hp = Math.max(0, defender.hp - dmgToApplyHp);
+    setHpBars();
+
+    const hitSprite = isPlayer ? botSpriteEl : playerSpriteEl;
+    if (hitSprite) {
+      hitSprite.classList.add('shake');
+      setTimeout(() => hitSprite.classList.remove('shake'), 450);
+    }
+
+    spawnFloatingDmg(isPlayer ? 'bot' : 'player', dmgToApplyHp);
+  } else {
+    spawnFloatingDmg(isPlayer ? 'bot' : 'player', 0);
+  }
+
+  await wait(900);
+  centerVsEl.classList.remove('visible');
+  resetStatHighlights();
+
+  return dmgToApplyHp;
 }
 
-/* tarcza – pokazuje, które kontry zadziałały i ile zabrały */
+// SEKWENCJA TURY
 
-function showShieldPopup(target,attInfo){
-  const el=target==="player" ? $("shield-player") : $("shield-bot");
-  if(!el) return;
+async function playTurnAfterPlayerRoll() {
+  if (inAnimation || phase !== 'playerRolled') return;
+  inAnimation = true;
+  if (rollBtn) rollBtn.disabled = true;
 
-  const breakdown=attInfo.countersBreakdown.filter(c=>c.points>0);
-  if(!breakdown.length || attInfo.penalty<=0){
-    el.classList.remove("show");
+  const { playerStatId, playerMult } = plannedRound;
+
+  roundInfoEl.textContent = `Atakujesz`;
+  await animateSingleAttack('player', playerStatId, playerMult);
+  if (bot.hp <= 0) {
+    endBattle('player');
+    inAnimation = false;
     return;
   }
 
-  let text="Tarcza (kontry):\n";
-  breakdown.forEach(c=>{
-    text += `${STATS[c.idx].name}: ${c.points} pkt\n`;
-  });
-  text += `Zabrane mocy: ${attInfo.penalty}`;
+  const bStat = randomChoice(STATS);
+  const bMult = rollSlotMultiplier();
+  plannedRound.botStatId = bStat.id;
+  plannedRound.botMult   = bMult;
 
-  el.textContent=text;
-  el.classList.remove("show");
-  void el.offsetWidth;
-  el.classList.add("show");
-}
+  await spinSlot(
+    botSlotEl, botSlotIconEl, botSlotStatEl, botSlotMultEl,
+    bStat.id, bMult, currentSlotRange()
+  );
 
-/* shake dla paneli */
+  roundInfoEl.textContent = `Przeciwnik losuje atak`;
+  setLog('Przeciwnik losuje swój atak…');
+  await animatePreview('bot', bStat.id, bMult);
 
-function hitAnimation(panelId,isStrong){
-  const panel=$(panelId);
-  if(!panel) return;
-  panel.classList.remove("hit-shake");
-  panel.classList.remove("hit-shake-strong");
-  void panel.offsetWidth;
-  panel.classList.add(isStrong ? "hit-shake-strong" : "hit-shake");
-}
-
-/* KONIEC WALKI */
-
-function endBattleAndShowResult(){
-  const pHP=gameState.playerHP;
-  const bHP=gameState.botHP;
-  let winner;
-  if(pHP>bHP) winner="player";
-  else if(bHP>pHP) winner="bot";
-  else winner="draw";
-
-  const basePool=gameState.stake*2;
-  const finalPool=basePool*gameState.multiplier;
-
-  let title,summary;
-  if(winner==="player"){
-    title="Wygrana!";
-    summary=`Pokonałeś bota ${gameState.botName} i zgarnąłeś ${finalPool} punktów.`;
-  } else if(winner==="bot"){
-    title="Porażka";
-    summary=`Bot ${gameState.botName} wygrał ten pojedynek.`;
-  } else {
-    title="Remis";
-    summary="Obaj skończyliście z tym samym poziomem HP.";
+  roundInfoEl.textContent = `Przeciwnik atakuje`;
+  await animateSingleAttack('bot', bStat.id, bMult);
+  if (player.hp <= 0) {
+    endBattle('bot');
+    inAnimation = false;
+    return;
   }
 
-  let detail="";
-  detail+=`Twoje HP: ${pHP} / 100\n`;
-  detail+=`HP przeciwnika: ${bHP} / 100\n`;
-  detail+=`Stawka: ${gameState.stake} + ${gameState.stake} = ${basePool} pkt.\n`;
-  detail+=`Mnożnik puli: x${gameState.multiplier} → potencjalna wygrana: ${finalPool} pkt.\n`;
-  detail+=`\nTo demo logiki – w pełnej wersji te punkty mogą ładować level, ranking itd.`;
-
-  $("result-title").textContent=title;
-  $("result-summary").textContent=summary;
-  $("result-detail").textContent=detail;
-  setScreen("screen-result");
+  await wait(400);
+  prepareNextTurn();
+  inAnimation = false;
 }
 
-/* WYNIK */
+// KONIEC WALKI
 
-function setupResultScreen(){
-  $("btn-play-again").addEventListener("click",()=>setScreen("screen-start"));
+function endBattle(winner) {
+  if (rollBtn) rollBtn.disabled = true;
+
+  const basePool = stakePerPlayer * 2;
+  const totalPool= basePool * poolMultiplier;
+  let logMsg = '';
+
+  if (winner === 'player') {
+    roundInfoEl.textContent = 'Koniec walki – WYGRAŁEŚ!';
+    logMsg = `Zgarniasz całą pulę: ${totalPool} pkt.`;
+    playOutcomeAnimation('win', () => showScreen('start'));
+  } else if (winner === 'bot') {
+    roundInfoEl.textContent = 'Koniec walki – przeciwnik wygrywa.';
+    logMsg = `Przeciwnik zgarnia ${totalPool} pkt. Spróbuj jeszcze raz.`;
+    playOutcomeAnimation('lose', () => showScreen('start'));
+  } else {
+    roundInfoEl.textContent = 'Koniec walki – remis.';
+    logMsg = `Nikt nie zgarnia puli ${totalPool} pkt.`;
+    highlightResetButton();
+  }
+
+  const progressNote = applyMatchResult(winner);
+  if (progressNote) logMsg += ` ${progressNote}`;
+  setLog(logMsg.trim());
+
+  phase = 'idle';
 }
+
+function applyMatchResult(winner) {
+  const prevLevel = currentLevelId;
+
+  if (winner === 'player') {
+    const maxWinsTrack = LEVELS[LEVELS.length - 1].winsFloor + 2;
+    consecutiveWins = Math.min(consecutiveWins + 1, maxWinsTrack);
+  } else if (winner === 'bot') {
+    const dropTo = Math.max(1, currentMatchLevelId - 1);
+    consecutiveWins = levelStartWins(dropTo);
+  }
+
+  currentLevelId = computeLevelFromWins(consecutiveWins);
+  updateLevelUI();
+
+  if (currentLevelId > prevLevel) {
+    const cfg = getLevelConfig(currentLevelId);
+    return `Awans! Wchodzisz na ${cfg.label} (sloty x1–x3).`;
+  }
+  if (currentLevelId < prevLevel) {
+    const cfg = getLevelConfig(currentLevelId);
+    return `Spadasz na ${cfg.label}.`;
+  }
+  return '';
+}
+
+// LOSUJ ATAK
+
+async function rollPlayerAttack() {
+  if (inAnimation || phase !== 'idle') return;
+  inAnimation = true;
+  if (rollBtn) rollBtn.disabled = true;
+  resetStatHighlights();
+  centerVsEl.classList.remove('visible');
+
+  const pStat = randomChoice(STATS);
+  const pMult = rollSlotMultiplier();
+
+  plannedRound.playerStatId = pStat.id;
+  plannedRound.playerMult   = pMult;
+
+  setLog('Losujesz swój atak – koło się kręci…');
+
+  await spinSlot(
+    playerSlotEl, playerSlotIconEl, playerSlotStatEl, playerSlotMultEl,
+    pStat.id, pMult, currentSlotRange()
+  );
+
+  roundInfoEl.textContent = `Podgląd Twojej mocy`;
+  await animatePreview('player', pStat.id, pMult);
+
+  roundInfoEl.textContent = `Kliknij „Atakuj”`;
+  setLog('Masz swój atak. Kliknij „Atakuj”.');
+
+  if (rollBtn) {
+    rollBtn.textContent = 'Atakuj';
+    rollBtn.disabled = false;
+  }
+  phase = 'playerRolled';
+  inAnimation = false;
+}
+
+function prepareNextTurn() {
+  updateSlotsUnknown();
+  resetStatHighlights();
+  centerVsEl.classList.remove('visible');
+  if (rollBtn) {
+    rollBtn.disabled = false;
+    rollBtn.textContent = 'Losuj atak';
+  }
+  setLog('Losuj nowy atak na kolejną turę.');
+  phase = 'idle';
+}
+
+// START WALKI
+
+function startBattleWithCurrentAllocation() {
+  player.stats = cloneAllocation();
+  bot.stats    = randomStats();
+
+  currentMatchLevelId = currentLevelId;
+  player.level = currentMatchLevelId;
+  bot.level    = currentMatchLevelId;
+
+  player.hp = HP_MAX;
+  bot.hp    = HP_MAX;
+
+  player.name = 'Ty';
+
+  if (currentRoom) {
+    stakePerPlayer = currentRoom.stake;
+    bot.name = currentRoom.ownerName;
+  } else {
+    bot.name = randomChoice(NAMES);
+  }
+
+  playerNameEl.textContent = player.name;
+  botNameEl.textContent    = bot.name;
+
+  setHpBars();
+  if (!currentMap) {
+    rollMap(playerAllocation, currentMatchLevelId);
+  } else {
+    renderMapUI();
+  }
+  updateLevelUI();
+  buildStatStacks();
+  renderCounterRow();
+  updateSlotsUnknown();
+  resetStatHighlights();
+  centerVsEl.classList.remove('visible');
+
+  plannedRound = {
+    playerStatId: null,
+    playerMult:   1,
+    botStatId:    null,
+    botMult:      1,
+  };
+
+  const mapLabel = currentMap ? currentMap.name : 'arenie';
+  setLog(`Poziom ${currentMatchLevelId} • Pokój #${currentRoom ? currentRoom.id : '?'} • ${mapLabel} (pula x${poolMultiplier}). Najpierw losujesz swój atak.`);
+  prepareNextTurn();
+}
+
+// INIT / LISTENERY
+
+startBtn.addEventListener('click', () => {
+  openBuildScreen(true);
+});
+
+buildBackBtn.addEventListener('click', () => {
+  showScreen('start');
+});
+
+buildStatsList.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const row = e.target.closest('.build-row');
+  if (!row) return;
+  const id = row.dataset.statId;
+
+  if (btn.dataset.value !== undefined) {
+    const chosenVal = Number(btn.dataset.value);
+    const currentVal = playerAllocation[id];
+    const totalWithout = totalAllocated() - currentVal;
+    const maxForRow = STAT_POINTS_TOTAL - totalWithout;
+    if (chosenVal <= maxForRow) {
+      playerAllocation[id] = chosenVal;
+    }
+  }
+  updateBuildUI();
+});
+
+buildConfirmBtn.addEventListener('click', () => {
+  if (!currentRoom) return;
+  showScreen('battle');
+  startBattleWithCurrentAllocation();
+});
+
+if (rerollMapBtn) {
+  rerollMapBtn.addEventListener('click', () => {
+    rollMap(playerAllocation, currentLevelId);
+  });
+}
+
+if (demoLevelBtn) {
+  demoLevelBtn.addEventListener('click', () => {
+    if (screenBattle.classList.contains('active') && phase !== 'idle') return;
+    const next = currentLevelId >= LEVELS.length ? 1 : currentLevelId + 1;
+    setLevelForDemo(next);
+  });
+}
+
+if (roomsListEl) {
+  roomsListEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-room-id]');
+    if (!btn) return;
+    const id = Number(btn.dataset.roomId);
+    selectRoomById(id);
+    updateBuildUI();
+  });
+}
+
+if (createRoomBtn) {
+  createRoomBtn.addEventListener('click', () => {
+    const stakeStr = prompt('Podaj stawkę pokoju (pkt):', '30');
+    if (!stakeStr) return;
+    const stake = Number(stakeStr);
+    if (!Number.isFinite(stake) || stake <= 0) return;
+
+    const room = {
+      id: nextRoomId++,
+      level: currentLevelId,
+      stake,
+      ownerName: 'Ty',
+    };
+    rooms.push(room);
+    currentRoom = room;
+    renderRooms();
+    updateBuildUI();
+  });
+}
+
+if (rollBtn) {
+  rollBtn.addEventListener('click', () => {
+    if (phase === 'idle') {
+      rollPlayerAttack();
+    } else if (phase === 'playerRolled') {
+      playTurnAfterPlayerRoll();
+    }
+  });
+}
+
+if (resetBtn) {
+  resetBtn.addEventListener('click', () => {
+    if (inAnimation) return;
+    openBuildScreen(true);
+  });
+}
+
+// DEV
+
+if (devBonusBtn) {
+  devBonusBtn.addEventListener('click', () => {
+    if (!currentMap) rollMap(playerAllocation, currentLevelId);
+    const approxBonus = Math.max(1, Math.round(mapBuffPercent / 5));
+    showMapBonusVisual(approxBonus);
+  });
+}
+
+if (devWinBtn) {
+  devWinBtn.addEventListener('click', () => endBattle('player'));
+}
+
+if (devLoseBtn) {
+  devLoseBtn.addEventListener('click', () => endBattle('bot'));
+}
+
+if (devDodgeBtn) {
+  devDodgeBtn.addEventListener('click', () => showDodge());
+}
+
+// start
+updateLevelUI();
+showScreen('start');

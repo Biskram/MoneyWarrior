@@ -2,188 +2,353 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8" />
-  <title>Arena Statystyk – demo</title>
+  <title>Money Warrior</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
-  <script src="game.js" defer></script>
 </head>
 <body>
-<div id="app">
+<div class="game-root">
 
-  <!-- EKRAN STARTOWY -->
-  <section id="screen-start" class="screen screen-active">
-    <div class="card start-card">
-      <h1 class="title">Arena Statystyk</h1>
-      <p class="subtitle">
-        Ustal stawkę, znajdź przeciwnika i sprawdź, czy Twoja rozkmina statów wygra z losowością.
-      </p>
+  <!-- ===== EKRAN STARTOWY ===== -->
+  <div id="screenStart" class="screen active">
+    <div class="start-screen">
+      <div class="start-bg-orbit"></div>
+      <div class="start-bg-orbit second"></div>
 
-      <div class="form-row">
-        <label for="stake-input">Stawka (punkty):</label>
-        <input id="stake-input" type="number" min="10" value="30" />
+      <div class="start-overlay">
+        <div class="start-header-row">
+          <div class="start-title-block">
+            <h1>Money Warrior</h1>
+            <p>
+              Fioletowa arena, pięć statystyk, mnożniki x3, kontry i dzikie BONUSY MAPY.
+              Zbuduj wojownika, wejdź do pokoju i spal pule przeciwnikowi przed nosem.
+            </p>
+          </div>
+          <div class="start-corner-chip">
+            <span>Tryb</span>
+            <strong>1 vs 1 • do śmierci</strong>
+          </div>
+        </div>
+
+        <!-- MINI ARENY – wszystkie mapy obok siebie -->
+        <div class="start-maps-strip">
+          <div class="start-map-card start-map-water">
+            <div class="start-map-orbit"></div>
+            <div class="start-map-icon">
+              <img src="water.png" alt="Źródło Wytrwałości">
+            </div>
+            <div class="start-map-name">Źródło Wytrwałości</div>
+            <div class="start-map-desc">Premia do Kondycji • długie pojedynki</div>
+          </div>
+
+          <div class="start-map-card start-map-fire">
+            <div class="start-map-orbit"></div>
+            <div class="start-map-icon">
+              <img src="fire.png" alt="Płonąca Arena">
+            </div>
+            <div class="start-map-name">Płonąca Arena</div>
+            <div class="start-map-desc">Premia do Siły • szybkie egzekucje</div>
+          </div>
+
+          <div class="start-map-card start-map-wind">
+            <div class="start-map-orbit"></div>
+            <div class="start-map-icon">
+              <img src="wind.png" alt="Wietrzne Szczyty">
+            </div>
+            <div class="start-map-name">Wietrzne Szczyty</div>
+            <div class="start-map-desc">Premia do Szybkości • uniki i pierwsze ciosy</div>
+          </div>
+
+          <div class="start-map-card start-map-forest">
+            <div class="start-map-orbit"></div>
+            <div class="start-map-icon">
+              <img src="natural.png" alt="Leśna Forteca">
+            </div>
+            <div class="start-map-name">Leśna Forteca</div>
+            <div class="start-map-desc">Premia do Wytrzymałości • twarde tarcze</div>
+          </div>
+
+          <div class="start-map-card start-map-storm">
+            <div class="start-map-orbit"></div>
+            <div class="start-map-icon">
+              <img src="lightning.png" alt="Burza Myśli">
+            </div>
+            <div class="start-map-name">Burza Myśli</div>
+            <div class="start-map-desc">Premia do Taktyki • brutalne kontry</div>
+          </div>
+        </div>
+
+        <!-- GŁÓWNY CTA -->
+        <div class="start-main-cta">
+          <button id="startBtn" class="primary start-main-btn">
+            Rozpocznij
+          </button>
+          <p class="start-main-sub">
+            Rozdaj statystyki • wybierz pokój • losuj atak • zgarnij pulę.
+          </p>
+        </div>
+
+        <div class="start-bottom">
+          <div class="start-feature-grid">
+            <div class="start-feature">
+              <div class="badge-circle">1</div>
+              <h3>Rozdaj statystyki</h3>
+              <p>Siła, Wytrzymałość, Szybkość, Kondycja, Taktyka – Twój build, Twój styl.</p>
+            </div>
+            <div class="start-feature">
+              <div class="badge-circle">2</div>
+              <h3>Wybierz pokój</h3>
+              <p>Dołącz do pokoju na Twoim poziomie albo stwórz własny ze swoją stawką.</p>
+            </div>
+            <div class="start-feature">
+              <div class="badge-circle">3</div>
+              <h3>Losuj atak</h3>
+              <p>Slot wybiera statę, potem mnożnik do x3. Kontry i BONUS MAPY kończą robotę.</p>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <button id="btn-find-match" class="btn primary">Szukaj rozgrywki</button>
     </div>
-  </section>
+  </div>
 
-  <!-- ROZDZIELANIE STATYSTYK -->
-  <section id="screen-allocate" class="screen">
-    <div class="card allocate-card">
-      <header class="allocate-header">
+  <!-- ===== EKRAN ROZDZIAŁU STATYSTYK + PODGLĄD MAPY/LEVELA + POKOJE ===== -->
+  <div id="screenBuild" class="screen">
+    <div class="build-card">
+      <div class="build-top">
         <div>
-          <div class="badge">Przeciwnik</div>
-          <h2 id="bot-name">Bot</h2>
+          <p class="eyebrow">Kreator wojownika</p>
+          <h2>Rozdziel punkty i wybierz pokój</h2>
+          <p class="build-desc">
+            Masz <strong>10 punktów</strong>. Rozdaj je jak chcesz, wybierz pokój na swoim poziomie
+            i wejdź do walki na wylosowanej mapie.
+          </p>
         </div>
-        <div class="allocate-stake">
-          <div>Twoja stawka: <span id="stake-display" class="strong">30</span> pkt</div>
-          <div>Mnożnik puli: <span id="multiplier-display" class="strong">1</span>x</div>
-          <div>Możliwa wygrana: <span id="potential-win" class="strong">60</span> pkt</div>
+        <div class="level-stack">
+          <div id="levelBadge" class="level-pill">Poziom 1</div>
+          <div id="streakInfo" class="streak-pill">Wygrane z rzędu: 0 / 2 do awansu</div>
+          <div id="matchmakingInfo" class="matchmaking-note">
+            Widzisz tylko pokoje graczy na Twoim poziomie.
+          </div>
+          <button id="demoLevelBtn" class="secondary ghost small">Zmień poziom (demo)</button>
         </div>
-      </header>
+      </div>
 
-      <p class="subtitle small">
-        Masz <span id="points-left" class="strong">10</span> punktów do rozdania.  
-        Im bardziej skupisz je w jednym miejscu, tym mocniej bijesz – ale łatwiej Cię skontrować.
-      </p>
+      <div class="builder-grid">
+        <div class="build-panel stats-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Twoje statystyki</p>
+              <p class="build-desc">Rozdaj punkty, by wzmocnić swój styl walki.</p>
+            </div>
+            <div id="pointsLeft" class="points-left">Pozostało punktów: 10</div>
+          </div>
 
-      <div id="elements-form" class="elements-form"></div>
+          <div class="build-stats-list" id="buildStatsList">
+            <!-- wypełnia JS -->
+          </div>
+        </div>
 
-      <footer class="allocate-footer">
-        <button id="btn-back-start" class="btn ghost">Wróć</button>
-        <button id="btn-accept-build" class="btn primary">Gotowe – jedziemy</button>
-      </footer>
-    </div>
-  </section>
+        <div class="build-panel map-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Mapa i mnożniki</p>
+              <p class="build-desc">Wylosuj arenę, buff statystyki oraz mnożnik punktów zależny od poziomu.</p>
+            </div>
+            <button id="rerollMapBtn" class="secondary ghost">Losuj mapę</button>
+          </div>
 
-  <!-- ARENA / WALKA -->
-  <section id="screen-battle" class="screen">
-    <div id="battle-arena" class="battle-arena">
+          <div class="map-preview">
+            <div class="map-preview-bg"></div>
+            <div class="map-preview-overlay">
+              <div class="map-chips">
+                <span class="map-chip" id="buildMapLevelChip">Poziom 1</span>
+                <span class="map-chip soft" id="buildSkillRange">Sloty x1–x3</span>
+              </div>
+              <div class="map-name" id="buildMapName">Arena demo</div>
+              <div class="map-buff" id="buildMapBuff">Premia +0% do statystyki</div>
 
-      <!-- Mapa + premia + pula -->
-      <div class="map-bar">
-        <div class="map-left">
-          <div id="map-name" class="map-name">Losowanie mapy...</div>
-          <div class="map-buff-row">
-            <div id="map-buff-pill" class="map-buff-pill">
-              <img id="map-buff-icon" src="strength.png" alt="" />
-              <span id="map-buff-text">Premia: ...</span>
+              <div class="map-mults">
+                <div class="mult-card">
+                  <div class="mult-label">Mnożnik umiejętności</div>
+                  <div class="mult-value" id="buildSkillMult">x1.0</div>
+                  <div class="mult-sub">Buff mapy na wskazaną statystykę</div>
+                </div>
+                <div class="mult-card">
+                  <div class="mult-label">Mnożnik punktów</div>
+                  <div class="mult-value" id="buildPointMult">x1</div>
+                  <div class="mult-sub">Pula nagród w tej arenie</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <div class="map-right">
-          <div id="map-multiplier" class="map-multiplier">
-            Mnożnik puli: x1 • Możliwa wygrana: 60 pkt
+      </div>
+
+      <!-- POKOJE NA TWOIM POZIOMIE -->
+      <div class="rooms-card">
+        <div class="rooms-head">
+          <div>
+            <p class="panel-label">Pokoje na Twoim poziomie</p>
+            <p class="build-desc">
+              Dołącz do pokoju gracza o tym samym poziomie albo stwórz własny i ustaw stawkę.
+            </p>
           </div>
+          <button id="createRoomBtn" class="secondary small">Stwórz pokój</button>
+        </div>
+        <div id="roomsList" class="rooms-list">
+          <!-- wypełnia JS -->
         </div>
       </div>
 
-      <!-- HP -->
-      <div class="hp-row">
-        <div class="hp-box">
-          <div class="hp-label">Ty</div>
-          <div class="hp-bar">
-            <div id="hp-player-fill" class="hp-fill"></div>
-          </div>
-          <div id="hp-player-text" class="hp-text">100 / 100 HP</div>
-        </div>
-        <div class="hp-box right">
-          <div class="hp-label"><span id="battle-bot-name">Bot</span></div>
-          <div class="hp-bar">
-            <div id="hp-bot-fill" class="hp-fill enemy"></div>
-          </div>
-          <div id="hp-bot-text" class="hp-text">100 / 100 HP</div>
-        </div>
+      <div class="build-buttons">
+        <button id="buildBackBtn" class="secondary">Wróć</button>
+        <button id="buildConfirmBtn" disabled>Wejdź na arenę (wybierz pokój)</button>
       </div>
-
-      <!-- BAR KONTR – ile kto kontruje co -->
-      <div id="counters-summary" class="counters-summary"></div>
-
-      <!-- LEGENDA KONTR (ładniejsze, bez czarnych ramek) -->
-      <div id="counters-legend" class="counters-legend"></div>
-
-      <!-- Postacie + ich staty -->
-      <div id="fighters-row" class="fighters-row">
-        <div id="player-panel" class="fighter-panel">
-          <img id="player-sprite" src="wojownik.png" alt="Ty" class="fighter-sprite" />
-          <div id="attack-marker-player" class="attack-marker">
-            <span id="attack-marker-player-text"></span>
-          </div>
-          <div id="damage-player" class="damage-popup"></div>
-          <div id="shield-player" class="shield-popup"></div>
-          <div id="player-icons" class="fighter-icons"></div>
-        </div>
-
-        <div id="bot-panel" class="fighter-panel right">
-          <img id="bot-sprite" src="wojownik.png" alt="Bot" class="fighter-sprite flip" />
-          <div id="attack-marker-bot" class="attack-marker enemy">
-            <span id="attack-marker-bot-text"></span>
-          </div>
-          <div id="damage-bot" class="damage-popup enemy"></div>
-          <div id="shield-bot" class="shield-popup enemy"></div>
-          <div id="bot-icons" class="fighter-icons"></div>
-        </div>
-      </div>
-
     </div>
+  </div>
 
-    <!-- Dół ekranu walki -->
-    <div class="battle-bottom">
-
-      <!-- duży log – dalej istnieje, ale ukryty w CSS -->
-      <div id="round-info" class="round-info">
-        <div id="round-header" class="round-header"></div>
-        <pre id="round-details" class="round-details"></pre>
+  <!-- ===== EKRAN WALKI ===== -->
+  <div id="screenBattle" class="screen">
+    <div class="arena-shell">
+      <div class="arena-bg-wrap">
+        <video id="arenaBg" autoplay loop muted playsinline></video>
       </div>
 
-      <!-- Slot na atak -->
-      <div class="next-attack-card">
-        <div class="slot-wrapper">
-          <div class="slot-col">
-            <div class="slot-title">Twój następny atak</div>
-            <div class="slot-icon-ring">
-              <img id="slot-player-icon" src="kolo_fortuny.png" alt="" />
+      <!-- DUŻA ikona mapy + opis bonusu i puli -->
+      <div class="big-map-wrap">
+        <div id="bigMapIcon" class="big-map-icon">
+          <img id="bigMapIconImg" src="strength.png" alt="Ikona mapy">
+        </div>
+        <div class="big-map-info">
+          <div id="mapBonus">Premia: +0% do statystyki</div>
+          <div id="poolInfo">Mnożnik puli: x1 • Możliwa wygrana: 0 pkt</div>
+        </div>
+      </div>
+
+      <div class="fighters-layer">
+        <!-- HP -->
+        <div class="hp-row">
+          <div class="hp-box">
+            <div class="hp-header">
+              <span id="playerName">Ty</span>
+              <span id="playerHpText">100 / 100 HP</span>
             </div>
-            <div id="slot-player-mult" class="slot-mult">x?</div>
-          </div>
-          <div class="slot-col">
-            <div class="slot-title">Atak bota</div>
-            <div class="slot-icon-ring enemy">
-              <img id="slot-bot-icon" src="kolo_fortuny.png" alt="" />
+            <div class="hp-bar-outer">
+              <div id="playerHpBar" class="hp-bar-inner"></div>
             </div>
-            <div id="slot-bot-mult" class="slot-mult enemy">x?</div>
+          </div>
+          <div class="hp-box">
+            <div class="hp-header">
+              <span id="botName">Gracz Demo1</span>
+              <span id="botHpText">100 / 100 HP</span>
+            </div>
+            <div class="hp-bar-outer">
+              <div id="botHpBar" class="hp-bar-inner bot"></div>
+            </div>
           </div>
         </div>
 
-        <div class="slot-info-row">
-          <div id="next-round-label" class="next-round-label">
-            Atak 1/5 – kliknij „Losuj atak”.
+        <!-- WOJOWNICY + koła + abilitki (za nimi i ciut wyżej) -->
+        <div class="fighters-row">
+          <!-- Gracz -->
+          <div class="fighter-col left">
+            <div class="sprite-wrap">
+              <img id="playerSprite" class="fighter-sprite"
+                   src="elooo.png" alt="wojownik gracza">
+            </div>
+
+            <div class="hero-slot hero-slot-left">
+              <div id="playerSlot" class="slot">
+                <img id="playerSlotIcon" class="slot-icon" src="strength.png" alt="slot">
+                <div id="playerSlotMult" class="slot-mult">x?</div>
+                <div id="playerSlotStat" class="slot-stat-name">?</div>
+              </div>
+              <button id="rollBtn" class="hero-roll-btn">Losuj atak</button>
+            </div>
+
+            <div class="stat-stack stat-stack-left" id="playerStatsStack"></div>
           </div>
-          <div class="next-attack-actions">
-            <button id="btn-next-round" class="btn primary">Losuj atak</button>
-            <button id="btn-battle-back" class="btn ghost small">Przerwij i wróć</button>
+
+          <!-- czerwony wynik mocy przed graczem -->
+          <div id="playerFrontValue" class="front-value"></div>
+
+          <!-- Gracz otrzymuje obrażenia -->
+          <div id="playerFloatingDmg" class="floating-dmg"></div>
+
+          <!-- Przeciwnik otrzymuje obrażenia -->
+          <div id="botFloatingDmg" class="floating-dmg"></div>
+
+          <!-- środkowe porównanie MOC vs KONTRA / UNIK / BONUS -->
+          <div id="centerVs" class="center-vs">
+            <div id="centerAtkText">—</div>
+            <div id="centerDefText">—</div>
+            <div id="centerDiffText">—</div>
           </div>
+
+          <!-- Przeciwnik -->
+          <div class="fighter-col right">
+            <div class="sprite-wrap">
+              <img id="botSprite" class="fighter-sprite"
+                   src="elooo.png" alt="wojownik przeciwnika">
+            </div>
+
+            <div class="hero-slot hero-slot-right">
+              <div id="botSlot" class="slot">
+                <img id="botSlotIcon" class="slot-icon" src="strength.png" alt="slot">
+                <div id="botSlotMult" class="slot-mult">x?</div>
+                <div id="botSlotStat" class="slot-stat-name">?</div>
+              </div>
+            </div>
+
+            <div class="stat-stack stat-stack-right" id="botStatsStack"></div>
+          </div>
+
+          <!-- niebieski wynik kontry przed przeciwnikiem -->
+          <div id="botFrontValue" class="front-value"></div>
+        </div>
+
+        <!-- DÓŁ ARENY: zasady kontr + log -->
+        <div class="bottom-ui">
+          <div class="bottom-counter">
+            <div class="counter-box">
+              <div class="counter-header-row">
+                <div class="counter-title">ZASADY KONTR</div>
+                <div class="map-mini-name" id="mapName">Arena demo</div>
+              </div>
+              <div class="counter-legend" id="counterLegend">
+                <span data-stat="STR">Siła ▶ Szybkość, Kondycja</span>
+                <span data-stat="END">Wytrzymałość ▶ Siła, Kondycja</span>
+                <span data-stat="SPD">Szybkość ▶ Wytrzymałość, Taktyka</span>
+                <span data-stat="STA">Kondycja ▶ Szybkość, Taktyka</span>
+                <span data-stat="TAC">Taktyka ▶ Siła, Wytrzymałość</span>
+              </div>
+              <div class="counter-row" id="counterRow"></div>
+            </div>
+            <div id="roundInfo" class="round-pill">Przygotowanie walki…</div>
+          </div>
+
+          <div id="logBox">Kliknij „Losuj atak”, żeby wybrać turę.</div>
         </div>
       </div>
-
-      <!-- lista rund – ukryta, ale zostawiam na przyszłość -->
-      <div id="rounds-list" class="rounds-list"></div>
-
-      <!-- ukryte listy dla logiki -->
-      <ul id="player-elements-list" class="hidden"></ul>
-      <ul id="bot-elements-list" class="hidden"></ul>
     </div>
-  </section>
+  </div>
 
-  <!-- WYNIK -->
-  <section id="screen-result" class="screen">
-    <div class="card result-card">
-      <h2 id="result-title" class="title">Wynik</h2>
-      <p id="result-summary" class="subtitle"></p>
-      <pre id="result-detail" class="result-detail"></pre>
-      <button id="btn-play-again" class="btn primary">Zagraj ponownie</button>
-    </div>
-  </section>
+  <!-- PANEL DEV -->
+  <div class="dev-panel">
+    <div class="dev-title">DEV</div>
+    <button id="devBonusBtn" class="dev-btn">Odpal bonus</button>
+    <button id="devWinBtn" class="dev-btn">Wygraj</button>
+    <button id="devLoseBtn" class="dev-btn">Przegraj</button>
+    <button id="devDodgeBtn" class="dev-btn">Wykonaj unik</button>
+  </div>
 
 </div>
+
+<!-- Pełnoekranowa animacja śmierci / wygranej -->
+<div id="deathOverlay" class="death-overlay">
+  <video id="deathVideo" class="death-video-full" src="Smierc.mp4" muted playsinline></video>
+</div>
+
+<script src="game.js"></script>
 </body>
 </html>
